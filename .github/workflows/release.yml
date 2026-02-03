@@ -82,7 +82,16 @@ jobs:
           cp Sources/Resources/AppIcon.icns "${CONTENTS}/Resources/AppIcon.icns"
           
           # Copy the SwiftPM resource bundle (contains mermaid.min.js etc.)
-          cp -R .build/arm64-apple-macosx/release/MacUML_MacUML.bundle "${CONTENTS}/Resources/"
+          # Try both possible locations
+          if [ -d ".build/arm64-apple-macosx/release/MacUML_MacUML.bundle" ]; then
+            cp -R .build/arm64-apple-macosx/release/MacUML_MacUML.bundle "${CONTENTS}/Resources/"
+          elif [ -d ".build/release/MacUML_MacUML.bundle" ]; then
+            cp -R .build/release/MacUML_MacUML.bundle "${CONTENTS}/Resources/"
+          else
+            echo "ERROR: Could not find MacUML_MacUML.bundle"
+            find .build -name "*.bundle" -type d
+            exit 1
+          fi
           
           cp -R .build/arm64-apple-macosx/release/Sparkle.framework "${CONTENTS}/Frameworks/"
           
