@@ -31,11 +31,11 @@ struct MermaidDocument: FileDocument {
     }
 
     private static let defaultContent = """
-        flowchart TD
-            A[Start] --> B{Decision}
-            B -->|Yes| C[Do something]
-            B -->|No| D[Do something else]
-            C --> E[End]
-            D --> E
-        """
+flowchart TD
+    A[Start] --> B{Decision}
+    B -->|Yes| C[Do something]
+    B -->|No| D[Do something else]
+    C --> E[End]
+    D --> E
+"""
 }

@@ -21,21 +21,6 @@ struct PreviewPane: View {
                     MermaidWebView(renderer: renderer)
                 }
             }
-            .contextMenu {
-                Button("Copy as PNG") {
-                    Task {
-                        await copyAsPNG()
-                    }
-                }
-                .disabled(renderer.state != .ready)
-
-                Button("Copy as SVG") {
-                    Task {
-                        await copyAsSVG()
-                    }
-                }
-                .disabled(renderer.state != .ready)
-            }
         }
     }
     
@@ -61,29 +46,14 @@ struct PreviewPane: View {
         .padding(.vertical, 6)
         .background(Color(nsColor: .windowBackgroundColor))
     }
-
-    private func copyAsPNG() async {
-        guard let pngData = await renderer.copyAsPNG() else { return }
-        let pasteboard = NSPasteboard.general
-        pasteboard.clearContents()
-        pasteboard.setData(pngData, forType: .png)
-    }
-
-    private func copyAsSVG() async {
-        guard let svg = await renderer.copySVG() else { return }
-        let pasteboard = NSPasteboard.general
-        pasteboard.clearContents()
-        pasteboard.setString(svg, forType: .string)
-    }
 }
 
 struct MermaidWebView: NSViewRepresentable {
     let renderer: MermaidRenderer
 
-    func makeNSView(context: Context) -> WKWebView {
+    func makeNSView(context: Context) -> DiagramWebView {
         renderer.webView
     }
 
-    func updateNSView(_ webView: WKWebView, context: Context) {
-    }
+    func updateNSView(_ webView: DiagramWebView, context: Context) {}
 }

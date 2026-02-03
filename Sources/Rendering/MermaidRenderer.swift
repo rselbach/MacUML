@@ -2,6 +2,34 @@ import Foundation
 import WebKit
 import Combine
 import os
+import AppKit
+
+class DiagramWebView: WKWebView {
+    var copyPNGHandler: (() -> Void)?
+    var copySVGHandler: (() -> Void)?
+    
+    override func willOpenMenu(_ menu: NSMenu, with event: NSEvent) {
+        menu.removeAllItems()
+        
+        let pngItem = NSMenuItem(title: "Copy as PNG", action: #selector(handleCopyPNG), keyEquivalent: "")
+        pngItem.target = self
+        menu.addItem(pngItem)
+        
+        let svgItem = NSMenuItem(title: "Copy as SVG", action: #selector(handleCopySVG), keyEquivalent: "")
+        svgItem.target = self
+        menu.addItem(svgItem)
+        
+        super.willOpenMenu(menu, with: event)
+    }
+    
+    @objc private func handleCopyPNG() {
+        copyPNGHandler?()
+    }
+    
+    @objc private func handleCopySVG() {
+        copySVGHandler?()
+    }
+}
 
 enum MermaidRenderState: Equatable {
     case idle
@@ -48,22 +76,51 @@ class MermaidRenderer: NSObject, ObservableObject {
             }
         }
     }
-    let webView: WKWebView
+    let webView: DiagramWebView
     private var lastSource: String = ""
     private var renderTask: Task<Void, Never>?
     private let debounceInterval: Duration = .milliseconds(300)
     private let logger = Logger(subsystem: "com.macuml", category: "mermaid")
+    private var mermaidReady = false
+    private var pendingSource: String?
 
     override init() {
         let config = WKWebViewConfiguration()
         config.preferences.setValue(true, forKey: "developerExtrasEnabled")
-        webView = WKWebView(frame: .zero, configuration: config)
+        
+        let contentController = WKUserContentController()
+        config.userContentController = contentController
+        
+        webView = DiagramWebView(frame: .zero, configuration: config)
         webView.setValue(false, forKey: "drawsBackground")
 
         super.init()
 
+        contentController.add(ReadyHandler(renderer: self), name: "ready")
         webView.navigationDelegate = self
         loadBaseHTML()
+        
+        webView.copyPNGHandler = { [weak self] in
+            guard let self else { return }
+            Task { @MainActor in
+                guard let pngData = await self.copyAsPNG() else { return }
+                let pasteboard = NSPasteboard.general
+                pasteboard.clearContents()
+                pasteboard.setData(pngData, forType: .png)
+            }
+        }
+        
+        webView.copySVGHandler = { [weak self] in
+            guard let self else { return }
+            Task { @MainActor in
+                guard let svg = await self.copySVG() else { return }
+                let pasteboard = NSPasteboard.general
+                pasteboard.clearContents()
+                pasteboard.setString(svg, forType: .string)
+            }
+        }
+        
+        logger.info("MermaidRenderer init complete")
     }
 
     func render(source: String, force: Bool = false) {
@@ -72,6 +129,12 @@ class MermaidRenderer: NSObject, ObservableObject {
 
         renderTask?.cancel()
         currentError = nil
+        
+        guard mermaidReady else {
+            logger.info("Mermaid not ready, queueing render")
+            pendingSource = source
+            return
+        }
 
         renderTask = Task {
             do {
@@ -94,7 +157,12 @@ class MermaidRenderer: NSObject, ObservableObject {
 
         state = .rendering
 
-        let js = "await window.renderDiagram(source);"
+        let js = """
+            if (typeof window.renderDiagram !== 'function') {
+                return { success: false, error: 'renderDiagram not defined' };
+            }
+            return await window.renderDiagram(source);
+            """
 
         do {
             let result = try await webView.callAsyncJavaScript(
@@ -108,9 +176,11 @@ class MermaidRenderer: NSObject, ObservableObject {
             if let dict = result as? [String: Any],
                let success = dict["success"] as? Bool {
                 if success {
+                    logger.info("Render succeeded")
                     state = .ready
                     currentError = nil
                 } else if let error = dict["error"] as? String {
+                    logger.info("Render failed: \(error)")
                     let line = dict["line"] as? Int
                     currentError = MermaidError(message: error, line: line)
                 }
@@ -141,15 +211,20 @@ class MermaidRenderer: NSObject, ObservableObject {
     }
 
     private func loadBaseHTML() {
+        guard let mermaidURL = Bundle.module.url(forResource: "mermaid.min", withExtension: "js") else {
+            logger.error("Failed to find bundled mermaid.min.js")
+            state = .failure("Missing mermaid.min.js resource")
+            return
+        }
+        
         let html = """
             <!DOCTYPE html>
             <html>
             <head>
                 <meta charset="UTF-8">
                 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-                <script type="module">
-                    import mermaid from 'https://cdn.jsdelivr.net/npm/mermaid@11/dist/mermaid.esm.min.mjs';
-                    
+                <script src="mermaid.min.js"></script>
+                <script>
                     window.currentTheme = 'auto';
                     
                     function getEffectiveTheme() {
@@ -176,8 +251,11 @@ class MermaidRenderer: NSObject, ObservableObject {
                         container.className = useDark ? 'dark-bg' : 'light-bg';
                     }
                     
-                    initMermaid();
-                    updateBackground();
+                    document.addEventListener('DOMContentLoaded', () => {
+                        initMermaid();
+                        updateBackground();
+                        window.webkit.messageHandlers.ready.postMessage(true);
+                    });
                     
                     window.matchMedia('(prefers-color-scheme: dark)').addEventListener('change', () => {
                         if (window.currentTheme === 'auto') {
@@ -206,14 +284,8 @@ class MermaidRenderer: NSObject, ObservableObject {
                             const id = 'mermaid-' + Date.now();
                             const { svg } = await mermaid.render(id, source, tempContainer);
                             
-                            // Check for error indicators in SVG
-                            const hasError = svg && (
-                                svg.includes('Syntax error') ||
-                                svg.includes('error-icon') ||
-                                svg.includes('error-text') ||
-                                svg.includes('Parse error') ||
-                                tempContainer.querySelector('.error-icon, .error-text, [class*="error"]')
-                            );
+                            // Check for actual syntax/parse errors (mermaid exceptions produce specific patterns)
+                            const hasError = svg.includes('Syntax error') || svg.includes('Parse error');
                             
                             if (svg && !hasError) {
                                 container.innerHTML = svg;
@@ -287,7 +359,7 @@ class MermaidRenderer: NSObject, ObservableObject {
             </body>
             </html>
             """
-        webView.loadHTMLString(html, baseURL: nil)
+        webView.loadHTMLString(html, baseURL: mermaidURL.deletingLastPathComponent())
     }
 
     func copyAsPNG() async -> Data? {
@@ -318,15 +390,28 @@ class MermaidRenderer: NSObject, ObservableObject {
             return nil
         }
     }
+    func handleMermaidReady() {
+        mermaidReady = true
+        if let source = pendingSource {
+            pendingSource = nil
+            render(source: source, force: true)
+        }
+    }
+}
+
+private class ReadyHandler: NSObject, WKScriptMessageHandler {
+    weak var renderer: MermaidRenderer?
+    init(renderer: MermaidRenderer) { self.renderer = renderer }
+    func userContentController(_ userContentController: WKUserContentController, didReceive message: WKScriptMessage) {
+        Task { @MainActor in
+            renderer?.handleMermaidReady()
+        }
+    }
 }
 
 extension MermaidRenderer: WKNavigationDelegate {
     nonisolated func webView(_ webView: WKWebView, didFinish navigation: WKNavigation!) {
-        Task { @MainActor in
-            if !lastSource.isEmpty {
-                await performRender(source: lastSource)
-            }
-        }
+        // Don't render here - wait for mermaid ready signal instead
     }
 
     nonisolated func webView(_ webView: WKWebView, didFail navigation: WKNavigation!, withError error: Error) {

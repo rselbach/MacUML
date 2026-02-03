@@ -16,7 +16,8 @@ let package = Package(
             path: "Sources",
             exclude: ["Info.plist"],
             resources: [
-                .copy("Resources/AppIcon.icns")
+                .copy("Resources/AppIcon.icns"),
+                .copy("Resources/mermaid.min.js")
             ]
         ),
         .testTarget(

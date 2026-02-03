@@ -78,6 +78,7 @@ jobs:
           cp .build/release/MacUML "${CONTENTS}/MacOS/MacUML"
           cp Sources/Info.plist "${CONTENTS}/Info.plist"
           cp Sources/Resources/AppIcon.icns "${CONTENTS}/Resources/AppIcon.icns"
+          cp Sources/Resources/mermaid.min.js "${CONTENTS}/Resources/mermaid.min.js"
 
       - name: Sign app bundle
         run: |
