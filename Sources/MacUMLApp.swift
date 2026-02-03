@@ -44,7 +44,7 @@ struct MacUMLApp: App {
         }
         
         Window("About MacUML", id: "about") {
-            AboutView()
+            AboutView(updater: appDelegate.updaterController?.updater)
         }
         .windowStyle(.hiddenTitleBar)
         .windowResizability(.contentSize)

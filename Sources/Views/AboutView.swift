@@ -1,8 +1,13 @@
 import SwiftUI
+import Sparkle
 
 struct AboutView: View {
+    let updater: SPUUpdater?
+    
     private let appVersion = Bundle.main.object(forInfoDictionaryKey: "CFBundleShortVersionString") as? String ?? "1.0"
     private let buildNumber = Bundle.main.object(forInfoDictionaryKey: "CFBundleVersion") as? String ?? "1"
+    
+    @State private var automaticallyChecks = false
     
     var body: some View {
         VStack(spacing: 16) {
@@ -26,6 +31,24 @@ struct AboutView: View {
                 .foregroundStyle(.secondary)
                 .multilineTextAlignment(.center)
             
+            if updater != nil {
+                Divider()
+                    .frame(width: 200)
+                
+                VStack(spacing: 12) {
+                    Toggle("Check for updates automatically", isOn: $automaticallyChecks)
+                        .toggleStyle(.checkbox)
+                        .onChange(of: automaticallyChecks) { _, newValue in
+                            updater?.automaticallyChecksForUpdates = newValue
+                        }
+                    
+                    Button("Check for Updates…") {
+                        updater?.checkForUpdates()
+                    }
+                    .disabled(updater?.canCheckForUpdates != true)
+                }
+            }
+            
             Divider()
                 .frame(width: 200)
             
@@ -35,9 +58,12 @@ struct AboutView: View {
         }
         .padding(32)
         .frame(width: 300)
+        .onAppear {
+            automaticallyChecks = updater?.automaticallyChecksForUpdates ?? false
+        }
     }
 }
 
 #Preview {
-    AboutView()
+    AboutView(updater: nil)
 }
