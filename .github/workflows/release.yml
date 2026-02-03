@@ -80,7 +80,9 @@ jobs:
           cp .build/release/MacUML "${CONTENTS}/MacOS/MacUML"
           cp Sources/Info.plist "${CONTENTS}/Info.plist"
           cp Sources/Resources/AppIcon.icns "${CONTENTS}/Resources/AppIcon.icns"
-          cp Sources/Resources/mermaid.min.js "${CONTENTS}/Resources/mermaid.min.js"
+          
+          # Copy the SwiftPM resource bundle (contains mermaid.min.js etc.)
+          cp -R .build/arm64-apple-macosx/release/MacUML_MacUML.bundle "${CONTENTS}/Resources/"
           
           cp -R .build/arm64-apple-macosx/release/Sparkle.framework "${CONTENTS}/Frameworks/"
           
