@@ -1,10 +1,22 @@
 import SwiftUI
 import AppKit
+import Sparkle
 
 class AppDelegate: NSObject, NSApplicationDelegate {
+    var updaterController: SPUStandardUpdaterController?
+    
     func applicationDidFinishLaunching(_ notification: Notification) {
         NSApp.setActivationPolicy(.regular)
         NSApp.activate(ignoringOtherApps: true)
+        
+        if let frameworksPath = Bundle.main.privateFrameworksPath,
+           FileManager.default.fileExists(atPath: "\(frameworksPath)/Sparkle.framework") {
+            updaterController = SPUStandardUpdaterController(
+                startingUpdater: true,
+                updaterDelegate: nil,
+                userDriverDelegate: nil
+            )
+        }
     }
 }
 
@@ -18,6 +30,7 @@ struct MacUMLApp: App {
         }
         .commands {
             AboutCommand()
+            CheckForUpdatesCommand(updater: appDelegate.updaterController?.updater)
             CommandGroup(after: .textEditing) {
                 Button("Refresh Preview") {
                     NotificationCenter.default.post(name: .refreshPreview, object: nil)
@@ -46,6 +59,21 @@ struct AboutCommand: Commands {
         CommandGroup(replacing: .appInfo) {
             Button("About MacUML") {
                 openWindow(id: "about")
+            }
+        }
+    }
+}
+
+struct CheckForUpdatesCommand: Commands {
+    let updater: SPUUpdater?
+    
+    var body: some Commands {
+        CommandGroup(after: .appInfo) {
+            if let updater {
+                Button("Check for Updates…") {
+                    updater.checkForUpdates()
+                }
+                .disabled(!updater.canCheckForUpdates)
             }
         }
     }

@@ -12,6 +12,8 @@ on:
 
 permissions:
   contents: write
+  pages: write
+  id-token: write
 
 jobs:
   build:
@@ -73,15 +75,23 @@ jobs:
         run: |
           APP_BUNDLE=".build/release-bundle/MacUML.app"
           CONTENTS="${APP_BUNDLE}/Contents"
-          mkdir -p "${CONTENTS}/MacOS" "${CONTENTS}/Resources"
+          mkdir -p "${CONTENTS}/MacOS" "${CONTENTS}/Resources" "${CONTENTS}/Frameworks"
           
           cp .build/release/MacUML "${CONTENTS}/MacOS/MacUML"
           cp Sources/Info.plist "${CONTENTS}/Info.plist"
           cp Sources/Resources/AppIcon.icns "${CONTENTS}/Resources/AppIcon.icns"
           cp Sources/Resources/mermaid.min.js "${CONTENTS}/Resources/mermaid.min.js"
+          
+          cp -R .build/arm64-apple-macosx/release/Sparkle.framework "${CONTENTS}/Frameworks/"
+          
+          install_name_tool -add_rpath @executable_path/../Frameworks "${CONTENTS}/MacOS/MacUML"
 
       - name: Sign app bundle
         run: |
+          codesign --force --options runtime --deep \
+            --sign "Developer ID Application" \
+            .build/release-bundle/MacUML.app/Contents/Frameworks/Sparkle.framework
+          
           codesign --force --options runtime \
             --sign "Developer ID Application" \
             --entitlements Sources/Entitlements.plist \
@@ -133,6 +143,44 @@ jobs:
         run: |
           mv .build/dmg/MacUML.dmg ".build/dmg/MacUML-${{ steps.version.outputs.version }}.dmg"
 
+      - name: Sign DMG for Sparkle
+        env:
+          SPARKLE_EDDSA_PRIVATE_KEY: ${{ secrets.SPARKLE_EDDSA_PRIVATE_KEY }}
+        run: |
+          SIGN_UPDATE=".build/artifacts/sparkle/Sparkle/bin/sign_update"
+          chmod +x "${SIGN_UPDATE}"
+          
+          SIGNATURE=$("${SIGN_UPDATE}" ".build/dmg/MacUML-${{ steps.version.outputs.version }}.dmg" --ed-key-file <(echo -n "${SPARKLE_EDDSA_PRIVATE_KEY}"))
+          echo "SPARKLE_SIGNATURE=${SIGNATURE}" >> "$GITHUB_ENV"
+
+      - name: Generate appcast
+        run: |
+          VERSION="${{ steps.version.outputs.version }}"
+          DMG_FILE=".build/dmg/MacUML-${VERSION}.dmg"
+          DMG_SIZE=$(stat -f%z "${DMG_FILE}")
+          PUB_DATE=$(date -u +"%a, %d %b %Y %H:%M:%S %z")
+          
+          mkdir -p .build/pages
+          
+          printf '<?xml version="1.0" encoding="utf-8"?>\n' > .build/pages/appcast.xml
+          printf '<rss version="2.0" xmlns:sparkle="http://www.andymatuschak.org/xml-namespaces/sparkle">\n' >> .build/pages/appcast.xml
+          printf '  <channel>\n' >> .build/pages/appcast.xml
+          printf '    <title>MacUML</title>\n' >> .build/pages/appcast.xml
+          printf '    <item>\n' >> .build/pages/appcast.xml
+          printf '      <title>Version %s</title>\n' "${VERSION}" >> .build/pages/appcast.xml
+          printf '      <pubDate>%s</pubDate>\n' "${PUB_DATE}" >> .build/pages/appcast.xml
+          printf '      <enclosure url="https://github.com/rselbach/MacUML/releases/download/v%s/MacUML-%s.dmg"\n' "${VERSION}" "${VERSION}" >> .build/pages/appcast.xml
+          printf '                 %s\n' "${SPARKLE_SIGNATURE}" >> .build/pages/appcast.xml
+          printf '                 type="application/octet-stream"/>\n' >> .build/pages/appcast.xml
+          printf '      <sparkle:version>%s</sparkle:version>\n' "${{ github.run_number }}" >> .build/pages/appcast.xml
+          printf '      <sparkle:shortVersionString>%s</sparkle:shortVersionString>\n' "${VERSION}" >> .build/pages/appcast.xml
+          printf '      <sparkle:minimumSystemVersion>14.0</sparkle:minimumSystemVersion>\n' >> .build/pages/appcast.xml
+          printf '    </item>\n' >> .build/pages/appcast.xml
+          printf '  </channel>\n' >> .build/pages/appcast.xml
+          printf '</rss>\n' >> .build/pages/appcast.xml
+          
+          cat .build/pages/appcast.xml
+
       - name: Upload DMG artifact
         uses: actions/upload-artifact@v4
         with:
@@ -145,6 +193,16 @@ jobs:
         with:
           files: .build/dmg/MacUML-${{ steps.version.outputs.version }}.dmg
           generate_release_notes: true
+
+      - name: Upload Pages artifact
+        if: startsWith(github.ref, 'refs/tags/')
+        uses: actions/upload-pages-artifact@v3
+        with:
+          path: .build/pages
+
+      - name: Deploy to GitHub Pages
+        if: startsWith(github.ref, 'refs/tags/')
+        uses: actions/deploy-pages@v4
 
       - name: Cleanup keychain
         if: always()

@@ -18,6 +18,12 @@
     <string>AppIcon</string>
     <key>LSMinimumSystemVersion</key>
     <string>14.0</string>
+    <key>SUFeedURL</key>
+    <string>https://rselbach.github.io/MacUML/appcast.xml</string>
+    <key>SUPublicEDKey</key>
+    <string>ePrj/6ZMfGvkCXTYRq+X0H9Ukshi3Wx3+swNSi75Tio=</string>
+    <key>SUEnableAutomaticChecks</key>
+    <true/>
     <key>CFBundleDocumentTypes</key>
     <array>
         <dict>
