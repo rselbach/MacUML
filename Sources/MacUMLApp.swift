@@ -17,11 +17,35 @@ struct MacUMLApp: App {
             DocumentView(document: file.$document)
         }
         .commands {
+            AboutCommand()
             CommandGroup(after: .textEditing) {
                 Button("Refresh Preview") {
                     NotificationCenter.default.post(name: .refreshPreview, object: nil)
                 }
                 .keyboardShortcut("r", modifiers: .command)
+            }
+        }
+        
+        Settings {
+            SettingsView()
+        }
+        
+        Window("About MacUML", id: "about") {
+            AboutView()
+        }
+        .windowStyle(.hiddenTitleBar)
+        .windowResizability(.contentSize)
+        .defaultPosition(.center)
+    }
+}
+
+struct AboutCommand: Commands {
+    @Environment(\.openWindow) private var openWindow
+    
+    var body: some Commands {
+        CommandGroup(replacing: .appInfo) {
+            Button("About MacUML") {
+                openWindow(id: "about")
             }
         }
     }

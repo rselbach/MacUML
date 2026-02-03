@@ -95,6 +95,10 @@ class MermaidRenderer: NSObject, ObservableObject {
         webView.setValue(false, forKey: "drawsBackground")
 
         super.init()
+        
+        if let savedTheme = MermaidTheme(rawValue: AppSettings.shared.defaultDiagramTheme) {
+            theme = savedTheme
+        }
 
         contentController.add(ReadyHandler(renderer: self), name: "ready")
         webView.navigationDelegate = self
@@ -272,6 +276,25 @@ class MermaidRenderer: NSObject, ObservableObject {
                         initMermaid();
                         updateBackground();
                     };
+                    
+                    window.rescaleSVG = function() {
+                        const container = document.getElementById('diagram');
+                        const svgEl = container.querySelector('svg');
+                        if (!svgEl) return;
+                        
+                        svgEl.style.transform = 'none';
+                        const bbox = svgEl.getBBox();
+                        const pad = 8;
+                        const containerW = container.clientWidth;
+                        const containerH = container.clientHeight;
+                        const scaleX = containerW / (bbox.width + pad * 2);
+                        const scaleY = containerH / (bbox.height + pad * 2);
+                        const scale = Math.min(scaleX, scaleY, 3);
+                        svgEl.style.transform = `scale(${scale})`;
+                        svgEl.style.transformOrigin = 'center center';
+                    };
+                    
+                    new ResizeObserver(() => window.rescaleSVG()).observe(document.documentElement);
 
                     window.renderDiagram = async function(source) {
                         window.lastSource = source;
@@ -289,6 +312,7 @@ class MermaidRenderer: NSObject, ObservableObject {
                             
                             if (svg && !hasError) {
                                 container.innerHTML = svg;
+                                requestAnimationFrame(() => window.rescaleSVG());
                                 return { success: true };
                             } else {
                                 const errorText = tempContainer.textContent || 'Syntax error in diagram';
@@ -323,17 +347,26 @@ class MermaidRenderer: NSObject, ObservableObject {
                 </script>
                 <style>
                     * { margin: 0; padding: 0; box-sizing: border-box; }
+                    html, body {
+                        height: 100%;
+                    }
                     body {
                         font-family: system-ui, -apple-system, sans-serif;
                         background: transparent;
                         display: flex;
                         justify-content: center;
-                        padding: 20px;
+                        align-items: center;
+                        padding: 8px;
                     }
                     #diagram {
-                        max-width: 100%;
+                        width: calc(100vw - 16px);
+                        height: calc(100vh - 16px);
                         border-radius: 8px;
-                        padding: 16px;
+                        padding: 8px;
+                        display: flex;
+                        justify-content: center;
+                        align-items: center;
+                        overflow: hidden;
                     }
                     #diagram.light-bg {
                         background: white;
@@ -343,7 +376,7 @@ class MermaidRenderer: NSObject, ObservableObject {
                     }
                     #diagram svg {
                         max-width: 100%;
-                        height: auto;
+                        max-height: 100%;
                     }
                     .error {
                         color: #ff6b6b;
@@ -392,6 +425,7 @@ class MermaidRenderer: NSObject, ObservableObject {
     }
     func handleMermaidReady() {
         mermaidReady = true
+        applyTheme()
         if let source = pendingSource {
             pendingSource = nil
             render(source: source, force: true)

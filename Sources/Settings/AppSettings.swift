@@ -1,0 +1,35 @@
+import SwiftUI
+import AppKit
+
+final class AppSettings: ObservableObject {
+    static let shared = AppSettings()
+    
+    @AppStorage("editorFontSize") var editorFontSize: Double = 13
+    @AppStorage("editorFontFamily") var editorFontFamily: String = "SF Mono"
+    @AppStorage("defaultDiagramTheme") var defaultDiagramTheme: String = "auto"
+    
+    private init() {}
+    
+    var editorFont: NSFont {
+        if let font = NSFont(name: editorFontFamily, size: editorFontSize) {
+            return font
+        }
+        return NSFont.monospacedSystemFont(ofSize: editorFontSize, weight: .regular)
+    }
+    
+    static let monospaceFonts: [String] = {
+        let monoFamilies = NSFontManager.shared.availableFontFamilies.filter { family in
+            guard let font = NSFont(name: family, size: 12) else { return false }
+            return font.isFixedPitch || family.lowercased().contains("mono") || family.lowercased().contains("courier") || family.lowercased().contains("menlo") || family.lowercased().contains("consolas")
+        }
+        
+        let preferred = ["SF Mono", "Menlo", "Monaco", "Courier New", "Courier"]
+        let sorted = monoFamilies.sorted { a, b in
+            let aIdx = preferred.firstIndex(of: a) ?? Int.max
+            let bIdx = preferred.firstIndex(of: b) ?? Int.max
+            if aIdx != bIdx { return aIdx < bIdx }
+            return a < b
+        }
+        return sorted
+    }()
+}

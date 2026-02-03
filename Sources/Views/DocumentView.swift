@@ -3,6 +3,7 @@ import SwiftUI
 struct DocumentView: View {
     @Binding var document: MermaidDocument
     @StateObject private var renderer = MermaidRenderer()
+    @ObservedObject private var settings = AppSettings.shared
 
     var body: some View {
         HSplitView {
@@ -23,10 +24,18 @@ struct DocumentView: View {
             renderer.render(source: newValue)
         }
         .onAppear {
+            if let theme = MermaidTheme(rawValue: settings.defaultDiagramTheme) {
+                renderer.theme = theme
+            }
             renderer.render(source: document.text)
         }
         .onReceive(NotificationCenter.default.publisher(for: .refreshPreview)) { _ in
             renderer.render(source: document.text, force: true)
+        }
+        .onChange(of: settings.defaultDiagramTheme) { _, newTheme in
+            if let theme = MermaidTheme(rawValue: newTheme) {
+                renderer.theme = theme
+            }
         }
     }
     

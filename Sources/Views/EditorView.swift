@@ -142,6 +142,7 @@ final class CodeTextView: NSTextView {
 struct EditorView: NSViewRepresentable {
     @Binding var text: String
     var errorLine: Int?
+    @ObservedObject private var settings = AppSettings.shared
 
     func makeNSView(context: Context) -> NSScrollView {
         let scrollView = NSScrollView()
@@ -157,7 +158,7 @@ struct EditorView: NSViewRepresentable {
 
         textView.delegate = context.coordinator
         textView.isRichText = false
-        textView.font = NSFont.monospacedSystemFont(ofSize: 13, weight: .regular)
+        textView.font = settings.editorFont
         textView.textColor = NSColor.textColor
         textView.backgroundColor = NSColor.textBackgroundColor
         textView.isAutomaticQuoteSubstitutionEnabled = false
@@ -180,6 +181,9 @@ struct EditorView: NSViewRepresentable {
 
     func updateNSView(_ scrollView: NSScrollView, context: Context) {
         guard let textView = scrollView.documentView as? CodeTextView else { return }
+        
+        textView.font = settings.editorFont
+        
         if textView.string != text {
             let selectedRanges = textView.selectedRanges
             textView.string = text
