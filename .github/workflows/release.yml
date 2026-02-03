@@ -1,0 +1,151 @@
+name: Release
+
+on:
+  push:
+    tags:
+      - 'v*'
+  workflow_dispatch:
+    inputs:
+      version:
+        description: 'Version to release (e.g., 1.0.0)'
+        required: false
+
+permissions:
+  contents: write
+
+jobs:
+  build:
+    runs-on: macos-14
+    
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Select Xcode 16
+        run: sudo xcode-select -s /Applications/Xcode_16.2.app/Contents/Developer
+
+      - name: Set version
+        id: version
+        run: |
+          if [[ "${{ github.event_name }}" == "push" ]]; then
+            VERSION="${GITHUB_REF#refs/tags/v}"
+          elif [[ -n "${{ github.event.inputs.version }}" ]]; then
+            VERSION="${{ github.event.inputs.version }}"
+          else
+            VERSION="0.0.0-dev"
+          fi
+          echo "version=${VERSION}" >> "$GITHUB_OUTPUT"
+
+      - name: Update version in Info.plist
+        run: |
+          /usr/libexec/PlistBuddy -c "Set :CFBundleShortVersionString ${{ steps.version.outputs.version }}" Sources/Info.plist
+          /usr/libexec/PlistBuddy -c "Set :CFBundleVersion ${{ github.run_number }}" Sources/Info.plist
+
+      - name: Build release
+        run: swift build -c release
+
+      - name: Import signing certificate
+        env:
+          CERTIFICATE_P12: ${{ secrets.DEVELOPER_ID_CERTIFICATE_P12 }}
+          CERTIFICATE_PASSWORD: ${{ secrets.DEVELOPER_ID_CERTIFICATE_PASSWORD }}
+        run: |
+          KEYCHAIN_PATH="${RUNNER_TEMP}/signing.keychain-db"
+          KEYCHAIN_PASSWORD="$(openssl rand -base64 32)"
+          
+          security create-keychain -p "${KEYCHAIN_PASSWORD}" "${KEYCHAIN_PATH}"
+          security set-keychain-settings -lut 21600 "${KEYCHAIN_PATH}"
+          security unlock-keychain -p "${KEYCHAIN_PASSWORD}" "${KEYCHAIN_PATH}"
+          
+          echo "${CERTIFICATE_P12}" | base64 --decode > "${RUNNER_TEMP}/certificate.p12"
+          security import "${RUNNER_TEMP}/certificate.p12" \
+            -P "${CERTIFICATE_PASSWORD}" \
+            -A \
+            -t cert \
+            -f pkcs12 \
+            -k "${KEYCHAIN_PATH}"
+          
+          security set-key-partition-list -S apple-tool:,apple:,codesign: -s -k "${KEYCHAIN_PASSWORD}" "${KEYCHAIN_PATH}"
+          security list-keychain -d user -s "${KEYCHAIN_PATH}" login.keychain-db
+          
+          rm "${RUNNER_TEMP}/certificate.p12"
+
+      - name: Create app bundle
+        run: |
+          APP_BUNDLE=".build/release-bundle/MacUML.app"
+          CONTENTS="${APP_BUNDLE}/Contents"
+          mkdir -p "${CONTENTS}/MacOS" "${CONTENTS}/Resources"
+          
+          cp .build/release/MacUML "${CONTENTS}/MacOS/MacUML"
+          cp Sources/Info.plist "${CONTENTS}/Info.plist"
+          cp Sources/Resources/AppIcon.icns "${CONTENTS}/Resources/AppIcon.icns"
+
+      - name: Sign app bundle
+        run: |
+          codesign --force --options runtime \
+            --sign "Developer ID Application" \
+            --entitlements Sources/Entitlements.plist \
+            .build/release-bundle/MacUML.app/Contents/MacOS/MacUML
+          
+          codesign --force --options runtime \
+            --sign "Developer ID Application" \
+            --entitlements Sources/Entitlements.plist \
+            .build/release-bundle/MacUML.app
+          
+          codesign --verify --deep --strict --verbose=2 .build/release-bundle/MacUML.app
+
+      - name: Create DMG
+        run: |
+          mkdir -p .build/dmg/staging
+          cp -R .build/release-bundle/MacUML.app .build/dmg/staging/
+          ln -s /Applications .build/dmg/staging/Applications
+          
+          hdiutil create -volname "MacUML" \
+            -srcfolder .build/dmg/staging \
+            -ov -format UDRW \
+            .build/dmg/MacUML-temp.dmg
+          
+          hdiutil convert .build/dmg/MacUML-temp.dmg \
+            -format UDZO \
+            -imagekey zlib-level=9 \
+            -o .build/dmg/MacUML.dmg
+          
+          rm .build/dmg/MacUML-temp.dmg
+          rm -rf .build/dmg/staging
+          
+          codesign --force --sign "Developer ID Application" .build/dmg/MacUML.dmg
+
+      - name: Notarize DMG
+        env:
+          APPLE_ID: ${{ secrets.APPLE_ID }}
+          APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
+          APPLE_APP_PASSWORD: ${{ secrets.APPLE_APP_PASSWORD }}
+        run: |
+          xcrun notarytool submit .build/dmg/MacUML.dmg \
+            --apple-id "${APPLE_ID}" \
+            --team-id "${APPLE_TEAM_ID}" \
+            --password "${APPLE_APP_PASSWORD}" \
+            --wait
+          
+          xcrun stapler staple .build/dmg/MacUML.dmg
+
+      - name: Rename DMG with version
+        run: |
+          mv .build/dmg/MacUML.dmg ".build/dmg/MacUML-${{ steps.version.outputs.version }}.dmg"
+
+      - name: Upload DMG artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: MacUML-${{ steps.version.outputs.version }}
+          path: .build/dmg/MacUML-${{ steps.version.outputs.version }}.dmg
+
+      - name: Create GitHub Release
+        if: startsWith(github.ref, 'refs/tags/')
+        uses: softprops/action-gh-release@v2
+        with:
+          files: .build/dmg/MacUML-${{ steps.version.outputs.version }}.dmg
+          generate_release_notes: true
+
+      - name: Cleanup keychain
+        if: always()
+        run: |
+          security delete-keychain "${RUNNER_TEMP}/signing.keychain-db" || true
