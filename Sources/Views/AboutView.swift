@@ -11,8 +11,7 @@ struct AboutView: View {
     
     var body: some View {
         VStack(spacing: 16) {
-            if let iconURL = Bundle.module.url(forResource: "AppIcon", withExtension: "icns"),
-               let iconImage = NSImage(contentsOf: iconURL) {
+            if let iconImage = NSApp.applicationIconImage {
                 Image(nsImage: iconImage)
                     .resizable()
                     .frame(width: 128, height: 128)

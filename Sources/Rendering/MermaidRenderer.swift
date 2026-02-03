@@ -215,7 +215,11 @@ class MermaidRenderer: NSObject, ObservableObject {
     }
 
     private func loadBaseHTML() {
-        guard let mermaidURL = Bundle.module.url(forResource: "mermaid.min", withExtension: "js") else {
+        // Try Bundle.main first (for app bundles), then Bundle.module (for swift run)
+        let mermaidURL: URL? = Bundle.main.url(forResource: "mermaid.min", withExtension: "js")
+            ?? Bundle.module.url(forResource: "mermaid.min", withExtension: "js")
+        
+        guard let mermaidURL else {
             logger.error("Failed to find bundled mermaid.min.js")
             state = .failure("Missing mermaid.min.js resource")
             return
