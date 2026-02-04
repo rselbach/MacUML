@@ -2,8 +2,8 @@ import SwiftUI
 import AppKit
 import Sparkle
 
-class AppDelegate: NSObject, NSApplicationDelegate {
-    var updaterController: SPUStandardUpdaterController?
+class AppDelegate: NSObject, NSApplicationDelegate, ObservableObject {
+    @Published var updaterController: SPUStandardUpdaterController?
     
     func applicationDidFinishLaunching(_ notification: Notification) {
         NSApp.setActivationPolicy(.regular)
@@ -41,7 +41,8 @@ struct MacUMLApp: App {
         }
         
         Window("About MacUML", id: "about") {
-            AboutView(updater: appDelegate.updaterController?.updater)
+            AboutWindowContent()
+                .environmentObject(appDelegate)
         }
         .windowStyle(.hiddenTitleBar)
         .windowResizability(.contentSize)
@@ -73,6 +74,14 @@ struct CheckForUpdatesCommand: Commands {
                 .disabled(!updater.canCheckForUpdates)
             }
         }
+    }
+}
+
+struct AboutWindowContent: View {
+    @EnvironmentObject private var appDelegate: AppDelegate
+    
+    var body: some View {
+        AboutView(updater: appDelegate.updaterController?.updater)
     }
 }
 
