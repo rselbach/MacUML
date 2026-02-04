@@ -34,8 +34,11 @@ final class MermaidHighlighter {
             ("\"[^\"\\n]*\"", stringColor),
             ("'[^'\\n]*'", stringColor),
             ("\\|[^|]+\\|", stringColor),
-            ("-->|==>|-.->|-->>|==>>|-.->>|--x|--o|<-->|<--|<.->|-.->", arrowColor),
-            ("---|===|\\.\\.\\.|--", arrowColor),
+            // Sequence diagram arrows and colon separator
+            ("-->>|->>|--x|-x|--\\)|-\\)|:", arrowColor),
+            // Flowchart arrows
+            ("-->|==>|-.->|==>>|-.->>|--o|<-->|<--|<.->", arrowColor),
+            ("---|===|\\.\\.\\.", arrowColor),
             ("\\[[^\\]]+\\]", nodeColor),
             ("\\([^)]+\\)", nodeColor),
             ("\\{[^}]+\\}", nodeColor),
