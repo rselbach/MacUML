@@ -286,16 +286,11 @@ class MermaidRenderer: NSObject, ObservableObject {
                         const svgEl = container.querySelector('svg');
                         if (!svgEl) return;
                         
-                        svgEl.style.transform = 'none';
-                        const bbox = svgEl.getBBox();
-                        const pad = 8;
-                        const containerW = container.clientWidth;
-                        const containerH = container.clientHeight;
-                        const scaleX = containerW / (bbox.width + pad * 2);
-                        const scaleY = containerH / (bbox.height + pad * 2);
-                        const scale = Math.min(scaleX, scaleY, 3);
-                        svgEl.style.transform = `scale(${scale})`;
-                        svgEl.style.transformOrigin = 'center center';
+                        svgEl.removeAttribute('style');
+                        svgEl.style.maxWidth = '100%';
+                        svgEl.style.maxHeight = '100%';
+                        svgEl.style.width = 'auto';
+                        svgEl.style.height = 'auto';
                     };
                     
                     new ResizeObserver(() => window.rescaleSVG()).observe(document.documentElement);
@@ -360,13 +355,13 @@ class MermaidRenderer: NSObject, ObservableObject {
                         display: flex;
                         justify-content: center;
                         align-items: center;
-                        padding: 8px;
+                        padding: 0;
                     }
                     #diagram {
-                        width: calc(100vw - 16px);
-                        height: calc(100vh - 16px);
-                        border-radius: 8px;
-                        padding: 8px;
+                        width: 100vw;
+                        height: 100vh;
+                        border-radius: 4px;
+                        padding: 4px;
                         display: flex;
                         justify-content: center;
                         align-items: center;

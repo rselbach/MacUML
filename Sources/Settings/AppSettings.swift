@@ -4,11 +4,17 @@ import AppKit
 final class AppSettings: ObservableObject {
     static let shared = AppSettings()
     
+    private static let defaultFontFamily = "SF Mono"
+    
     @AppStorage("editorFontSize") var editorFontSize: Double = 13
-    @AppStorage("editorFontFamily") var editorFontFamily: String = "SF Mono"
+    @AppStorage("editorFontFamily") var editorFontFamily: String = defaultFontFamily
     @AppStorage("defaultDiagramTheme") var defaultDiagramTheme: String = "auto"
     
-    private init() {}
+    private init() {
+        if UserDefaults.standard.string(forKey: "editorFontFamily") == nil {
+            UserDefaults.standard.set(Self.defaultFontFamily, forKey: "editorFontFamily")
+        }
+    }
     
     var editorFont: NSFont {
         if let font = NSFont(name: editorFontFamily, size: editorFontSize) {

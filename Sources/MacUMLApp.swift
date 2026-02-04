@@ -25,6 +25,7 @@ struct MacUMLApp: App {
         DocumentGroup(newDocument: MermaidDocument()) { file in
             DocumentView(document: file.$document)
         }
+        .defaultSize(width: 900, height: 600)
         .commands {
             AboutCommand()
             CheckForUpdatesCommand(updater: appDelegate.updaterController?.updater)
