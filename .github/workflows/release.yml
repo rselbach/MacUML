@@ -88,15 +88,39 @@ jobs:
 
       - name: Sign app bundle
         run: |
-          codesign --force --options runtime --deep \
-            --sign "Developer ID Application" \
-            .build/release-bundle/MacUML.app/Contents/Frameworks/Sparkle.framework
+          SPARKLE_FW=".build/release-bundle/MacUML.app/Contents/Frameworks/Sparkle.framework"
           
+          # Sign Sparkle XPC services individually (no entitlements - they must not be sandboxed)
+          codesign --force --options runtime \
+            --sign "Developer ID Application" \
+            "${SPARKLE_FW}/Versions/B/XPCServices/Installer.xpc"
+          
+          codesign --force --options runtime \
+            --sign "Developer ID Application" \
+            --preserve-metadata=entitlements \
+            "${SPARKLE_FW}/Versions/B/XPCServices/Downloader.xpc"
+          
+          # Sign Sparkle helper apps
+          codesign --force --options runtime \
+            --sign "Developer ID Application" \
+            "${SPARKLE_FW}/Versions/B/Autoupdate"
+          
+          codesign --force --options runtime \
+            --sign "Developer ID Application" \
+            "${SPARKLE_FW}/Versions/B/Updater.app"
+          
+          # Sign Sparkle framework itself
+          codesign --force --options runtime \
+            --sign "Developer ID Application" \
+            "${SPARKLE_FW}"
+          
+          # Sign main executable with entitlements
           codesign --force --options runtime \
             --sign "Developer ID Application" \
             --entitlements Sources/Entitlements.plist \
             .build/release-bundle/MacUML.app/Contents/MacOS/MacUML
           
+          # Sign app bundle with entitlements
           codesign --force --options runtime \
             --sign "Developer ID Application" \
             --entitlements Sources/Entitlements.plist \

@@ -24,6 +24,8 @@
     <string>ePrj/6ZMfGvkCXTYRq+X0H9Ukshi3Wx3+swNSi75Tio=</string>
     <key>SUEnableAutomaticChecks</key>
     <true/>
+    <key>SUEnableInstallerLauncherService</key>
+    <true/>
     <key>CFBundleDocumentTypes</key>
     <array>
         <dict>
