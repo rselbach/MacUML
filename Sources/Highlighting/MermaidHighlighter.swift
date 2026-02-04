@@ -1,5 +1,6 @@
 import AppKit
 
+@MainActor
 final class MermaidHighlighter {
     static let shared = MermaidHighlighter()
 

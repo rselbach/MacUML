@@ -1,20 +1,20 @@
 import Testing
 @testable import MacUML
 
-@Suite("PlantUML Renderer Tests")
-struct PlantUMLRendererTests {
+@Suite("Mermaid Renderer Tests")
+struct MermaidRendererTests {
 
     @Test("Render state starts idle")
     @MainActor
     func initialState() async {
-        let renderer = PlantUMLRenderer()
+        let renderer = MermaidRenderer()
         #expect(renderer.state == .idle)
     }
 
     @Test("Empty source stays idle")
     @MainActor
     func emptySource() async throws {
-        let renderer = PlantUMLRenderer()
+        let renderer = MermaidRenderer()
         renderer.render(source: "   ")
 
         // Wait for debounce
