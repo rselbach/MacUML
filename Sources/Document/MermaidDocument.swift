@@ -2,15 +2,20 @@ import SwiftUI
 import UniformTypeIdentifiers
 
 extension UTType {
-    static var mermaid: UTType {
+    static var mermaidMMD: UTType {
         UTType(importedAs: "com.mermaid.mmd", conformingTo: .plainText)
+    }
+    
+    static var mermaid: UTType {
+        UTType(importedAs: "com.mermaid.mermaid", conformingTo: .plainText)
     }
 }
 
 struct MermaidDocument: FileDocument {
     var text: String
 
-    static var readableContentTypes: [UTType] { [.mermaid, .plainText] }
+    static var readableContentTypes: [UTType] { [.mermaidMMD, .mermaid, .plainText] }
+    static var writableContentTypes: [UTType] { [.mermaidMMD, .mermaid] }
 
     init(text: String = defaultContent) {
         self.text = text

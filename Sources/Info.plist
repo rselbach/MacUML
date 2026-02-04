@@ -38,22 +38,18 @@
             <key>LSItemContentTypes</key>
             <array>
                 <string>com.mermaid.mmd</string>
+                <string>com.mermaid.mermaid</string>
                 <string>public.plain-text</string>
-            </array>
-            <key>CFBundleTypeExtensions</key>
-            <array>
-                <string>mmd</string>
-                <string>mermaid</string>
             </array>
         </dict>
     </array>
-    <key>UTImportedTypeDeclarations</key>
+    <key>UTExportedTypeDeclarations</key>
     <array>
         <dict>
             <key>UTTypeIdentifier</key>
             <string>com.mermaid.mmd</string>
             <key>UTTypeDescription</key>
-            <string>Mermaid Diagram</string>
+            <string>Mermaid Diagram (.mmd)</string>
             <key>UTTypeConformsTo</key>
             <array>
                 <string>public.plain-text</string>
@@ -63,10 +59,28 @@
                 <key>public.filename-extension</key>
                 <array>
                     <string>mmd</string>
+                </array>
+            </dict>
+        </dict>
+        <dict>
+            <key>UTTypeIdentifier</key>
+            <string>com.mermaid.mermaid</string>
+            <key>UTTypeDescription</key>
+            <string>Mermaid Diagram (.mermaid)</string>
+            <key>UTTypeConformsTo</key>
+            <array>
+                <string>public.plain-text</string>
+            </array>
+            <key>UTTypeTagSpecification</key>
+            <dict>
+                <key>public.filename-extension</key>
+                <array>
                     <string>mermaid</string>
                 </array>
             </dict>
         </dict>
     </array>
+    <key>UTImportedTypeDeclarations</key>
+    <array/>
 </dict>
 </plist>
