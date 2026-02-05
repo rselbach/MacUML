@@ -186,7 +186,13 @@ class MermaidRenderer: NSObject, ObservableObject {
                 } else if let error = dict["error"] as? String {
                     logger.info("Render failed: \(error)")
                     let line = dict["line"] as? Int
+                    state = .failure(error)
                     currentError = MermaidError(message: error, line: line)
+                } else {
+                    let fallbackError = "Failed to render diagram"
+                    logger.error("\(fallbackError, privacy: .public)")
+                    state = .failure(fallbackError)
+                    currentError = MermaidError(message: fallbackError, line: nil)
                 }
             } else {
                 state = .ready
@@ -246,7 +252,7 @@ class MermaidRenderer: NSObject, ObservableObject {
                         mermaid.initialize({
                             startOnLoad: false,
                             theme: getEffectiveTheme(),
-                            securityLevel: 'loose',
+                            securityLevel: 'strict',
                             fontFamily: 'system-ui, -apple-system, sans-serif'
                         });
                     }

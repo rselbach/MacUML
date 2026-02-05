@@ -64,15 +64,82 @@ final class CodeTextView: NSTextView {
     }
     
     override func keyDown(with event: NSEvent) {
+        let flags = event.modifierFlags.intersection(.deviceIndependentFlagsMask)
+        let hasShift = flags.contains(.shift)
+        
         switch event.keyCode {
         case 48: // Tab
-            if event.modifierFlags.contains(.shift) {
+            if hasShift {
                 unindentSelection()
             } else {
                 indentSelection()
             }
         case 36: // Return/Enter
             insertNewlineWithIndent()
+        case 115: // Home
+            if hasShift {
+                moveToBeginningOfDocumentAndModifySelection(nil)
+            } else {
+                moveToBeginningOfDocument(nil)
+            }
+        case 119: // End
+            if hasShift {
+                moveToEndOfDocumentAndModifySelection(nil)
+            } else {
+                moveToEndOfDocument(nil)
+            }
+        case 116: // Page Up
+            if hasShift {
+                pageUpAndModifySelection(nil)
+            } else {
+                pageUp(nil)
+            }
+        case 121: // Page Down
+            if hasShift {
+                pageDownAndModifySelection(nil)
+            } else {
+                pageDown(nil)
+            }
+        case 123: // Left Arrow
+            if flags.contains(.command) {
+                if hasShift {
+                    moveToBeginningOfLineAndModifySelection(nil)
+                } else {
+                    moveToBeginningOfLine(nil)
+                }
+            } else {
+                super.keyDown(with: event)
+            }
+        case 124: // Right Arrow
+            if flags.contains(.command) {
+                if hasShift {
+                    moveToEndOfLineAndModifySelection(nil)
+                } else {
+                    moveToEndOfLine(nil)
+                }
+            } else {
+                super.keyDown(with: event)
+            }
+        case 126: // Up Arrow
+            if flags.contains(.command) {
+                if hasShift {
+                    moveToBeginningOfDocumentAndModifySelection(nil)
+                } else {
+                    moveToBeginningOfDocument(nil)
+                }
+            } else {
+                super.keyDown(with: event)
+            }
+        case 125: // Down Arrow
+            if flags.contains(.command) {
+                if hasShift {
+                    moveToEndOfDocumentAndModifySelection(nil)
+                } else {
+                    moveToEndOfDocument(nil)
+                }
+            } else {
+                super.keyDown(with: event)
+            }
         default:
             super.keyDown(with: event)
         }
