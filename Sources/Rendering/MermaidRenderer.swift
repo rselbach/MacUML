@@ -180,6 +180,10 @@ class MermaidRenderer: NSObject, ObservableObject {
             if let dict = result as? [String: Any],
                let success = dict["success"] as? Bool {
                 if success {
+                    if let stale = dict["stale"] as? Bool, stale {
+                        logger.debug("Dropping stale render result")
+                        return
+                    }
                     logger.info("Render succeeded")
                     state = .ready
                     currentError = nil
@@ -197,10 +201,13 @@ class MermaidRenderer: NSObject, ObservableObject {
             } else {
                 state = .ready
             }
+
+            await auditPreviewDOM(context: "post-render")
         } catch {
             if !Task.isCancelled {
                 logger.error("Render failed: \(error.localizedDescription)")
                 state = .failure(error.localizedDescription)
+                await auditPreviewDOM(context: "render-error")
             }
         }
     }
@@ -240,6 +247,56 @@ class MermaidRenderer: NSObject, ObservableObject {
                 <script src="mermaid.min.js"></script>
                 <script>
                     window.currentTheme = 'auto';
+                    window.renderSequence = 0;
+
+                    function summarizeNode(node) {
+                        const text = (node.textContent || '').trim().substring(0, 200);
+                        if (node.nodeType === Node.TEXT_NODE) {
+                            return { nodeType: 'text', text };
+                        }
+                        if (node instanceof Element) {
+                            return {
+                                nodeType: node.tagName.toLowerCase(),
+                                id: node.id || '',
+                                className: node.className || '',
+                                text
+                            };
+                        }
+                        return { nodeType: String(node.nodeType), text };
+                    }
+
+                    function collectUnexpectedBodyNodes() {
+                        const diagram = document.getElementById('diagram');
+                        if (!diagram) return [];
+                        return Array.from(document.body.childNodes).filter((node) => {
+                            if (node === diagram) return false;
+                            if (node instanceof Element &&
+                                node.getAttribute('data-macuml-role') === 'temp-render') {
+                                return false;
+                            }
+                            if (node.nodeType === Node.TEXT_NODE) {
+                                return (node.textContent || '').trim().length > 0;
+                            }
+                            return true;
+                        });
+                    }
+
+                    function cleanupUnexpectedBodyNodes(reason) {
+                        const unexpectedNodes = collectUnexpectedBodyNodes();
+                        if (unexpectedNodes.length === 0) return;
+
+                        const details = unexpectedNodes.map((node) => summarizeNode(node));
+                        console.warn('[MermaidPreview] Removing unexpected body nodes', { reason, details });
+                        unexpectedNodes.forEach((node) => node.remove());
+                    }
+
+                    window.collectPreviewDiagnostics = function() {
+                        const unexpectedNodes = collectUnexpectedBodyNodes();
+                        return {
+                            extraNodeCount: unexpectedNodes.length,
+                            extras: unexpectedNodes.map((node) => summarizeNode(node))
+                        };
+                    };
                     
                     function getEffectiveTheme() {
                         if (window.currentTheme === 'auto') {
@@ -268,6 +325,37 @@ class MermaidRenderer: NSObject, ObservableObject {
                     document.addEventListener('DOMContentLoaded', () => {
                         initMermaid();
                         updateBackground();
+                        cleanupUnexpectedBodyNodes('DOMContentLoaded');
+
+                        const observer = new MutationObserver((mutations) => {
+                            let hasUnexpectedMutation = false;
+                            const diagram = document.getElementById('diagram');
+
+                            for (const mutation of mutations) {
+                                for (const addedNode of mutation.addedNodes) {
+                                    if (!diagram) continue;
+                                    if (addedNode === diagram) continue;
+                                    if (diagram.contains(addedNode)) continue;
+                                    if (addedNode instanceof Element &&
+                                        addedNode.getAttribute('data-macuml-role') === 'temp-render') {
+                                        continue;
+                                    }
+                                    if (addedNode.nodeType === Node.TEXT_NODE &&
+                                        (addedNode.textContent || '').trim().length === 0) {
+                                        continue;
+                                    }
+                                    hasUnexpectedMutation = true;
+                                    break;
+                                }
+                                if (hasUnexpectedMutation) break;
+                            }
+
+                            if (hasUnexpectedMutation) {
+                                cleanupUnexpectedBodyNodes('mutation-observer');
+                            }
+                        });
+                        observer.observe(document.body, { childList: true });
+
                         window.webkit.messageHandlers.ready.postMessage(true);
                     });
                     
@@ -303,14 +391,24 @@ class MermaidRenderer: NSObject, ObservableObject {
 
                     window.renderDiagram = async function(source) {
                         window.lastSource = source;
+                        const renderSequence = ++window.renderSequence;
                         const container = document.getElementById('diagram');
-                        const tempContainer = document.getElementById('temp-render');
-                        
-                        tempContainer.innerHTML = '';
+                        const tempContainer = document.createElement('div');
+                        tempContainer.style.position = 'fixed';
+                        tempContainer.style.left = '-10000px';
+                        tempContainer.style.top = '0';
+                        tempContainer.style.visibility = 'hidden';
+                        tempContainer.style.pointerEvents = 'none';
+                        tempContainer.setAttribute('data-macuml-role', 'temp-render');
+                        tempContainer.setAttribute('aria-hidden', 'true');
+                        document.body.appendChild(tempContainer);
                         
                         try {
-                            const id = 'mermaid-' + Date.now();
+                            const id = 'mermaid-' + renderSequence + '-' + Date.now();
                             const { svg } = await mermaid.render(id, source, tempContainer);
+                            if (renderSequence !== window.renderSequence) {
+                                return { success: true, stale: true };
+                            }
                             
                             // Check for actual syntax/parse errors (mermaid exceptions produce specific patterns)
                             const hasError = svg.includes('Syntax error') || svg.includes('Parse error');
@@ -318,9 +416,11 @@ class MermaidRenderer: NSObject, ObservableObject {
                             if (svg && !hasError) {
                                 container.innerHTML = svg;
                                 requestAnimationFrame(() => window.rescaleSVG());
+                                cleanupUnexpectedBodyNodes('render-success');
                                 return { success: true };
                             } else {
                                 const errorText = tempContainer.textContent || 'Syntax error in diagram';
+                                cleanupUnexpectedBodyNodes('render-error-content');
                                 return { success: false, error: errorText.trim().substring(0, 200) };
                             }
                         } catch (e) {
@@ -346,7 +446,8 @@ class MermaidRenderer: NSObject, ObservableObject {
                             
                             return { success: false, error: msg, line: line };
                         } finally {
-                            tempContainer.innerHTML = '';
+                            tempContainer.remove();
+                            cleanupUnexpectedBodyNodes('render-finally');
                         }
                     };
                 </script>
@@ -393,11 +494,40 @@ class MermaidRenderer: NSObject, ObservableObject {
             </head>
             <body>
                 <div id="diagram"></div>
-                <div id="temp-render" style="position: absolute; left: -9999px; visibility: hidden;"></div>
             </body>
             </html>
             """
         webView.loadHTMLString(html, baseURL: mermaidURL.deletingLastPathComponent())
+    }
+
+    private func auditPreviewDOM(context: String) async {
+        let js = """
+            if (typeof window.collectPreviewDiagnostics !== 'function') {
+                return null;
+            }
+            return window.collectPreviewDiagnostics();
+            """
+
+        do {
+            guard let result = try await webView.evaluateJavaScript(js) as? [String: Any],
+                  let extraNodeCount = result["extraNodeCount"] as? Int,
+                  extraNodeCount > 0 else {
+                return
+            }
+
+            var details = "[]"
+            if let extras = result["extras"] as? [[String: Any]],
+               let data = try? JSONSerialization.data(withJSONObject: extras, options: []),
+               let text = String(data: data, encoding: .utf8) {
+                details = text
+            }
+
+            logger.error(
+                "Preview DOM audit (\(context, privacy: .public)): extra nodes=\(extraNodeCount, privacy: .public), details=\(details, privacy: .public)"
+            )
+        } catch {
+            logger.error("Preview DOM audit failed (\(context, privacy: .public)): \(error.localizedDescription, privacy: .public)")
+        }
     }
 
     func copyAsPNG() async -> Data? {
