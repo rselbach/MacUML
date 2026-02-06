@@ -78,15 +78,15 @@ final class CodeTextView: NSTextView {
             insertNewlineWithIndent()
         case 115: // Home
             if hasShift {
-                moveToBeginningOfDocumentAndModifySelection(nil)
+                moveToBeginningOfLineAndModifySelection(nil)
             } else {
-                moveToBeginningOfDocument(nil)
+                moveToBeginningOfLine(nil)
             }
         case 119: // End
             if hasShift {
-                moveToEndOfDocumentAndModifySelection(nil)
+                moveToEndOfLineAndModifySelection(nil)
             } else {
-                moveToEndOfDocument(nil)
+                moveToEndOfLine(nil)
             }
         case 116: // Page Up
             if hasShift {
