@@ -29,6 +29,15 @@ struct DocumentView: View {
         .onReceive(NotificationCenter.default.publisher(for: .refreshPreview)) { _ in
             renderer.render(source: document.text, force: true)
         }
+        .onReceive(NotificationCenter.default.publisher(for: .zoomIn)) { _ in
+            renderer.zoomIn()
+        }
+        .onReceive(NotificationCenter.default.publisher(for: .zoomOut)) { _ in
+            renderer.zoomOut()
+        }
+        .onReceive(NotificationCenter.default.publisher(for: .zoomReset)) { _ in
+            renderer.resetZoom()
+        }
     }
     
     private func errorBar(error: MermaidError) -> some View {

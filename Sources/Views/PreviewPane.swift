@@ -17,8 +17,20 @@ struct PreviewPane: View {
                     Text("Type Mermaid syntax to see preview")
                         .foregroundStyle(.secondary)
 
-                case .rendering, .ready, .failure:
+                case .rendering, .ready:
                     MermaidWebView(renderer: renderer)
+
+                case .failure(let message):
+                    MermaidWebView(renderer: renderer)
+                    Text(message)
+                        .font(.caption)
+                        .foregroundStyle(.white)
+                        .padding(.horizontal, 10)
+                        .padding(.vertical, 6)
+                        .background(Color.red.opacity(0.9))
+                        .clipShape(RoundedRectangle(cornerRadius: 6))
+                        .padding(12)
+                        .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
                 }
             }
         }
@@ -26,6 +38,35 @@ struct PreviewPane: View {
     
     private var toolbar: some View {
         HStack {
+            HStack(spacing: 6) {
+                Button {
+                    renderer.zoomOut()
+                } label: {
+                    Image(systemName: "minus.magnifyingglass")
+                }
+                .help("Zoom Out")
+                
+                Button {
+                    renderer.zoomIn()
+                } label: {
+                    Image(systemName: "plus.magnifyingglass")
+                }
+                .help("Zoom In")
+                
+                Button {
+                    renderer.resetZoom()
+                } label: {
+                    Text("100%")
+                        .font(.caption.monospacedDigit())
+                }
+                .help("Actual Size")
+
+                Text("\(Int((renderer.zoomLevel * 100).rounded()))%")
+                    .font(.caption.monospacedDigit())
+                    .foregroundStyle(.secondary)
+                    .frame(minWidth: 42, alignment: .trailing)
+            }
+
             Spacer()
             
             HStack(spacing: 4) {

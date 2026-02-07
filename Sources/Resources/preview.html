@@ -3,7 +3,6 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'self' 'unsafe-inline' 'unsafe-eval'; style-src 'self' 'unsafe-inline'; img-src 'self' data:; font-src 'self';">
     <script src="mermaid.min.js"></script>
     <script>
         window.currentTheme = 'auto';
@@ -165,10 +164,12 @@
             if (!svgEl) return;
 
             svgEl.removeAttribute('style');
-            svgEl.style.maxWidth = '100%';
-            svgEl.style.maxHeight = '100%';
-            svgEl.style.width = 'auto';
-            svgEl.style.height = 'auto';
+            svgEl.style.display = 'block';
+            svgEl.style.maxWidth = 'none';
+            svgEl.style.maxHeight = 'none';
+            svgEl.style.width = '100%';
+            svgEl.style.height = '100%';
+            svgEl.setAttribute('preserveAspectRatio', 'xMidYMid meet');
         };
 
         new ResizeObserver(() => window.rescaleSVG()).observe(document.documentElement);
@@ -259,6 +260,8 @@
         }
         .zoom-inner {
             display: flex;
+            width: 100%;
+            height: 100%;
             justify-content: center;
             align-items: center;
             transform-origin: center center;

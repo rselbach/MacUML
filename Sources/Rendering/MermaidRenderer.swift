@@ -69,6 +69,7 @@ enum MermaidTheme: String, CaseIterable {
 class MermaidRenderer: NSObject, ObservableObject {
     @Published private(set) var state: MermaidRenderState = .idle
     @Published private(set) var currentError: MermaidError?
+    @Published private(set) var zoomLevel: Double = 1.0
     @Published var theme: MermaidTheme = .auto {
         didSet {
             if oldValue != theme {
@@ -83,6 +84,9 @@ class MermaidRenderer: NSObject, ObservableObject {
     private let logger = Logger(subsystem: "com.macuml", category: "mermaid")
     private var mermaidReady = false
     private var pendingSource: String?
+    private let zoomStep: Double = 0.1
+    private let minZoom: Double = 0.25
+    private let maxZoom: Double = 5.0
 
     nonisolated static func navigationPolicy(for requestURL: URL?) -> WKNavigationActionPolicy {
         guard let requestURL else {
@@ -149,6 +153,9 @@ class MermaidRenderer: NSObject, ObservableObject {
         guard mermaidReady else {
             logger.info("Mermaid not ready, queueing render")
             pendingSource = source
+            Task {
+                await validatePreviewRuntime()
+            }
             return
         }
 
@@ -160,6 +167,49 @@ class MermaidRenderer: NSObject, ObservableObject {
             }
 
             await performRender(source: source)
+        }
+    }
+
+    func zoomIn() {
+        setZoom(zoomLevel + zoomStep)
+    }
+
+    func zoomOut() {
+        setZoom(zoomLevel - zoomStep)
+    }
+
+    func resetZoom() {
+        setZoom(1.0)
+    }
+
+    private func setZoom(_ newLevel: Double) {
+        let rounded = (clampZoom(newLevel) * 100).rounded() / 100
+        zoomLevel = rounded
+
+        guard mermaidReady else { return }
+        Task {
+            await applyZoom(level: rounded)
+        }
+    }
+
+    private func clampZoom(_ level: Double) -> Double {
+        min(max(level, minZoom), maxZoom)
+    }
+
+    private func applyZoom(level: Double) async {
+        let js = "window.setZoom(\(level));"
+        do {
+            let result = try await webView.evaluateJavaScript(js)
+            if let zoom = result as? Double {
+                zoomLevel = zoom
+                return
+            }
+
+            if let zoom = result as? NSNumber {
+                zoomLevel = zoom.doubleValue
+            }
+        } catch {
+            logger.error("Failed to set zoom to \(level, privacy: .public): \(error.localizedDescription, privacy: .public)")
         }
     }
 
@@ -195,6 +245,23 @@ class MermaidRenderer: NSObject, ObservableObject {
                     if let stale = dict["stale"] as? Bool, stale {
                         logger.debug("Dropping stale render result")
                         return
+                    }
+                    if let metrics = await fetchDiagramMetrics() {
+                        if !metrics.hasSVG {
+                            let message = "Render reported success, but no SVG was found in preview."
+                            logger.error("\(message, privacy: .public)")
+                            state = .failure(message)
+                            currentError = MermaidError(message: message, line: nil)
+                            return
+                        }
+                        let viewHasSize = webView.bounds.width > 1 && webView.bounds.height > 1
+                        if viewHasSize && (metrics.width <= 1 || metrics.height <= 1) {
+                            let message = "Rendered SVG has invalid size (\(metrics.width)x\(metrics.height))."
+                            logger.error("\(message, privacy: .public)")
+                            state = .failure(message)
+                            currentError = MermaidError(message: message, line: nil)
+                            return
+                        }
                     }
                     logger.info("Render succeeded")
                     state = .ready
@@ -240,276 +307,77 @@ class MermaidRenderer: NSObject, ObservableObject {
     }
 
     private func loadBaseHTML() {
-        // Try Bundle.main first (for app bundles), then Bundle.module (for swift run)
-        let mermaidURL: URL? = Bundle.main.url(forResource: "mermaid.min", withExtension: "js")
-            ?? Bundle.module.url(forResource: "mermaid.min", withExtension: "js")
-        
-        guard let mermaidURL else {
-            logger.error("Failed to find bundled mermaid.min.js")
-            state = .failure("Missing mermaid.min.js resource")
+        let previewURL: URL? = Bundle.main.url(forResource: "preview", withExtension: "html")
+            ?? Bundle.module.url(forResource: "preview", withExtension: "html")
+
+        guard let previewURL else {
+            logger.error("Failed to find bundled preview.html")
+            state = .failure("Missing preview renderer resource")
             return
         }
-        
-        let html = """
-            <!DOCTYPE html>
-            <html>
-            <head>
-                <meta charset="UTF-8">
-                <meta name="viewport" content="width=device-width, initial-scale=1.0">
-                <script src="mermaid.min.js"></script>
-                <script>
-                    window.currentTheme = 'auto';
-                    window.renderSequence = 0;
 
-                    function summarizeNode(node) {
-                        const text = (node.textContent || '').trim().substring(0, 200);
-                        if (node.nodeType === Node.TEXT_NODE) {
-                            return { nodeType: 'text', text };
-                        }
-                        if (node instanceof Element) {
-                            return {
-                                nodeType: node.tagName.toLowerCase(),
-                                id: node.id || '',
-                                className: node.className || '',
-                                text
-                            };
-                        }
-                        return { nodeType: String(node.nodeType), text };
-                    }
+        webView.loadFileURL(previewURL, allowingReadAccessTo: previewURL.deletingLastPathComponent())
+    }
 
-                    function collectUnexpectedBodyNodes() {
-                        const diagram = document.getElementById('diagram');
-                        if (!diagram) return [];
-                        return Array.from(document.body.childNodes).filter((node) => {
-                            if (node === diagram) return false;
-                            if (node instanceof Element &&
-                                node.getAttribute('data-macuml-role') === 'temp-render') {
-                                return false;
-                            }
-                            if (node.nodeType === Node.TEXT_NODE) {
-                                return (node.textContent || '').trim().length > 0;
-                            }
-                            return true;
-                        });
-                    }
-
-                    function cleanupUnexpectedBodyNodes(reason) {
-                        const unexpectedNodes = collectUnexpectedBodyNodes();
-                        if (unexpectedNodes.length === 0) return;
-
-                        const details = unexpectedNodes.map((node) => summarizeNode(node));
-                        console.warn('[MermaidPreview] Removing unexpected body nodes', { reason, details });
-                        unexpectedNodes.forEach((node) => node.remove());
-                    }
-
-                    window.collectPreviewDiagnostics = function() {
-                        const unexpectedNodes = collectUnexpectedBodyNodes();
-                        return {
-                            extraNodeCount: unexpectedNodes.length,
-                            extras: unexpectedNodes.map((node) => summarizeNode(node))
-                        };
-                    };
-                    
-                    function getEffectiveTheme() {
-                        if (window.currentTheme === 'auto') {
-                            return window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'default';
-                        }
-                        return window.currentTheme;
-                    }
-                    
-                    function initMermaid() {
-                        mermaid.initialize({
-                            startOnLoad: false,
-                            theme: getEffectiveTheme(),
-                            securityLevel: 'strict',
-                            fontFamily: 'system-ui, -apple-system, sans-serif'
-                        });
-                    }
-                    
-                    function updateBackground() {
-                        const theme = getEffectiveTheme();
-                        const container = document.getElementById('diagram');
-                        const useDark = theme === 'dark' || 
-                            (window.currentTheme === 'auto' && window.matchMedia('(prefers-color-scheme: dark)').matches);
-                        container.className = useDark ? 'dark-bg' : 'light-bg';
-                    }
-                    
-                    document.addEventListener('DOMContentLoaded', () => {
-                        initMermaid();
-                        updateBackground();
-                        cleanupUnexpectedBodyNodes('DOMContentLoaded');
-
-                        const observer = new MutationObserver((mutations) => {
-                            let hasUnexpectedMutation = false;
-                            const diagram = document.getElementById('diagram');
-
-                            for (const mutation of mutations) {
-                                for (const addedNode of mutation.addedNodes) {
-                                    if (!diagram) continue;
-                                    if (addedNode === diagram) continue;
-                                    if (diagram.contains(addedNode)) continue;
-                                    if (addedNode instanceof Element &&
-                                        addedNode.getAttribute('data-macuml-role') === 'temp-render') {
-                                        continue;
-                                    }
-                                    if (addedNode.nodeType === Node.TEXT_NODE &&
-                                        (addedNode.textContent || '').trim().length === 0) {
-                                        continue;
-                                    }
-                                    hasUnexpectedMutation = true;
-                                    break;
-                                }
-                                if (hasUnexpectedMutation) break;
-                            }
-
-                            if (hasUnexpectedMutation) {
-                                cleanupUnexpectedBodyNodes('mutation-observer');
-                            }
-                        });
-                        observer.observe(document.body, { childList: true });
-
-                        window.webkit.messageHandlers.ready.postMessage(true);
-                    });
-                    
-                    window.matchMedia('(prefers-color-scheme: dark)').addEventListener('change', () => {
-                        if (window.currentTheme === 'auto') {
-                            initMermaid();
-                            updateBackground();
-                            if (window.lastSource) {
-                                window.renderDiagram(window.lastSource);
-                            }
-                        }
-                    });
-                    
-                    window.setTheme = function(theme) {
-                        window.currentTheme = theme;
-                        initMermaid();
-                        updateBackground();
-                    };
-                    
-                    window.rescaleSVG = function() {
-                        const container = document.getElementById('diagram');
-                        const svgEl = container.querySelector('svg');
-                        if (!svgEl) return;
-                        
-                        svgEl.removeAttribute('style');
-                        svgEl.style.maxWidth = '100%';
-                        svgEl.style.maxHeight = '100%';
-                        svgEl.style.width = 'auto';
-                        svgEl.style.height = 'auto';
-                    };
-                    
-                    new ResizeObserver(() => window.rescaleSVG()).observe(document.documentElement);
-
-                    window.renderDiagram = async function(source) {
-                        window.lastSource = source;
-                        const renderSequence = ++window.renderSequence;
-                        const container = document.getElementById('diagram');
-                        const tempContainer = document.createElement('div');
-                        tempContainer.style.position = 'fixed';
-                        tempContainer.style.left = '-10000px';
-                        tempContainer.style.top = '0';
-                        tempContainer.style.visibility = 'hidden';
-                        tempContainer.style.pointerEvents = 'none';
-                        tempContainer.setAttribute('data-macuml-role', 'temp-render');
-                        tempContainer.setAttribute('aria-hidden', 'true');
-                        document.body.appendChild(tempContainer);
-                        
-                        try {
-                            const id = 'mermaid-' + renderSequence + '-' + Date.now();
-                            const { svg } = await mermaid.render(id, source, tempContainer);
-                            if (renderSequence !== window.renderSequence) {
-                                return { success: true, stale: true };
-                            }
-                            
-                            // Check for actual syntax/parse errors (mermaid exceptions produce specific patterns)
-                            const hasError = svg.includes('Syntax error') || svg.includes('Parse error');
-                            
-                            if (svg && !hasError) {
-                                container.innerHTML = svg;
-                                requestAnimationFrame(() => window.rescaleSVG());
-                                cleanupUnexpectedBodyNodes('render-success');
-                                return { success: true };
-                            } else {
-                                const errorText = tempContainer.textContent || 'Syntax error in diagram';
-                                cleanupUnexpectedBodyNodes('render-error-content');
-                                return { success: false, error: errorText.trim().substring(0, 200) };
-                            }
-                        } catch (e) {
-                            let line = null;
-                            const msg = e.message || String(e);
-                            
-                            // Try various line number patterns
-                            const patterns = [
-                                /line\\s*(\\d+)/i,
-                                /on line (\\d+)/i,
-                                /at line (\\d+)/i,
-                                /:(\\d+):/,
-                                /\\((\\d+):(\\d+)\\)/
-                            ];
-                            
-                            for (const pattern of patterns) {
-                                const match = msg.match(pattern);
-                                if (match) {
-                                    line = parseInt(match[1], 10);
-                                    break;
-                                }
-                            }
-                            
-                            return { success: false, error: msg, line: line };
-                        } finally {
-                            tempContainer.remove();
-                            cleanupUnexpectedBodyNodes('render-finally');
-                        }
-                    };
-                </script>
-                <style>
-                    * { margin: 0; padding: 0; box-sizing: border-box; }
-                    html, body {
-                        height: 100%;
-                    }
-                    body {
-                        font-family: system-ui, -apple-system, sans-serif;
-                        background: transparent;
-                        display: flex;
-                        justify-content: center;
-                        align-items: center;
-                        padding: 0;
-                    }
-                    #diagram {
-                        width: 100vw;
-                        height: 100vh;
-                        border-radius: 4px;
-                        padding: 4px;
-                        display: flex;
-                        justify-content: center;
-                        align-items: center;
-                        overflow: hidden;
-                    }
-                    #diagram.light-bg {
-                        background: white;
-                    }
-                    #diagram.dark-bg {
-                        background: #1e1e1e;
-                    }
-                    #diagram svg {
-                        max-width: 100%;
-                        max-height: 100%;
-                    }
-                    .error {
-                        color: #ff6b6b;
-                        padding: 1em;
-                        white-space: pre-wrap;
-                        word-break: break-word;
-                    }
-                </style>
-            </head>
-            <body>
-                <div id="diagram"></div>
-            </body>
-            </html>
+    private func validatePreviewRuntime() async {
+        let hasSource = !lastSource.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+        let js = """
+            (function() {
+                return {
+                    hasMermaid: typeof mermaid !== 'undefined',
+                    hasRenderDiagram: typeof window.renderDiagram === 'function',
+                    hasSetTheme: typeof window.setTheme === 'function',
+                    hasSetZoom: typeof window.setZoom === 'function'
+                };
+            })()
             """
-        webView.loadHTMLString(html, baseURL: mermaidURL.deletingLastPathComponent())
+
+        var lastFlags: (Bool, Bool, Bool, Bool)?
+        for _ in 0..<20 {
+            do {
+                guard let result = try await webView.evaluateJavaScript(js) as? [String: Any] else {
+                    try await Task.sleep(for: .milliseconds(100))
+                    continue
+                }
+
+                let hasMermaid = result["hasMermaid"] as? Bool ?? false
+                let hasRenderDiagram = result["hasRenderDiagram"] as? Bool ?? false
+                let hasSetTheme = result["hasSetTheme"] as? Bool ?? false
+                let hasSetZoom = result["hasSetZoom"] as? Bool ?? false
+                lastFlags = (hasMermaid, hasRenderDiagram, hasSetTheme, hasSetZoom)
+
+                if hasMermaid && hasRenderDiagram && hasSetTheme && hasSetZoom {
+                    if !mermaidReady {
+                        logger.info("Preview runtime validated before ready callback; enabling fallback readiness")
+                        handleMermaidReady()
+                    }
+                    return
+                }
+            } catch {
+                logger.error("Preview runtime validation attempt failed: \(error.localizedDescription, privacy: .public)")
+            }
+
+            do {
+                try await Task.sleep(for: .milliseconds(100))
+            } catch {
+                return
+            }
+        }
+
+        if let lastFlags {
+            logger.error(
+                "Preview runtime invalid: hasMermaid=\(lastFlags.0, privacy: .public), hasRenderDiagram=\(lastFlags.1, privacy: .public), hasSetTheme=\(lastFlags.2, privacy: .public), hasSetZoom=\(lastFlags.3, privacy: .public)"
+            )
+            if hasSource {
+                state = .failure("Preview runtime failed (mermaid:\(lastFlags.0), render:\(lastFlags.1), theme:\(lastFlags.2), zoom:\(lastFlags.3))")
+            }
+            return
+        }
+
+        logger.error("Preview runtime validation returned no usable result")
+        if hasSource {
+            state = .failure("Preview runtime did not initialize")
+        }
     }
 
     private func auditPreviewDOM(context: String) async {
@@ -539,6 +407,32 @@ class MermaidRenderer: NSObject, ObservableObject {
             )
         } catch {
             logger.error("Preview DOM audit failed (\(context, privacy: .public)): \(error.localizedDescription, privacy: .public)")
+        }
+    }
+
+    private func fetchDiagramMetrics() async -> (hasSVG: Bool, width: Double, height: Double)? {
+        let js = """
+            (function() {
+                const svg = document.querySelector('#diagram svg');
+                if (!svg) {
+                    return { hasSVG: false, width: 0, height: 0 };
+                }
+                const rect = svg.getBoundingClientRect();
+                return { hasSVG: true, width: rect.width, height: rect.height };
+            })()
+            """
+
+        do {
+            guard let result = try await webView.evaluateJavaScript(js) as? [String: Any],
+                  let hasSVG = result["hasSVG"] as? Bool,
+                  let width = result["width"] as? Double,
+                  let height = result["height"] as? Double else {
+                return nil
+            }
+            return (hasSVG, width, height)
+        } catch {
+            logger.error("Failed to fetch diagram metrics: \(error.localizedDescription, privacy: .public)")
+            return nil
         }
     }
 
@@ -597,7 +491,12 @@ class MermaidRenderer: NSObject, ObservableObject {
     }
 
     func copySVG() async -> String? {
-        let js = "document.getElementById('diagram').innerHTML"
+        let js = """
+            (function() {
+                const svg = document.querySelector('#diagram svg');
+                return svg ? svg.outerHTML : '';
+            })()
+            """
         do {
             let result = try await webView.evaluateJavaScript(js)
             return result as? String
@@ -607,8 +506,12 @@ class MermaidRenderer: NSObject, ObservableObject {
         }
     }
     func handleMermaidReady() {
+        guard !mermaidReady else { return }
         mermaidReady = true
         applyTheme()
+        Task {
+            await applyZoom(level: zoomLevel)
+        }
         if let source = pendingSource {
             pendingSource = nil
             render(source: source, force: true)
@@ -636,7 +539,9 @@ extension MermaidRenderer: WKNavigationDelegate {
     }
 
     nonisolated func webView(_ webView: WKWebView, didFinish navigation: WKNavigation!) {
-        // Don't render here - wait for mermaid ready signal instead
+        Task { @MainActor in
+            await validatePreviewRuntime()
+        }
     }
 
     nonisolated func webView(_ webView: WKWebView, didFail navigation: WKNavigation!, withError error: Error) {

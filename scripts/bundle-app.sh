@@ -37,6 +37,22 @@ find_sparkle() {
   err "Sparkle.framework not found; run 'swift build' first"
 }
 
+sign_bundle() {
+  local bundle="$1"
+  local contents="${bundle}/Contents"
+  local framework="${contents}/Frameworks/Sparkle.framework"
+  local executable="${contents}/MacOS/${APP_NAME}"
+  local identity="-"
+
+  [[ -d "${framework}" ]] || err "missing Sparkle.framework at ${framework}"
+  [[ -f "${executable}" ]] || err "missing executable at ${executable}"
+
+  # Signing order matters for nested app bundles/frameworks.
+  codesign --force --deep --sign "${identity}" --timestamp=none "${framework}"
+  codesign --force --sign "${identity}" --timestamp=none "${executable}"
+  codesign --force --sign "${identity}" --timestamp=none "${bundle}"
+}
+
 create_bundle() {
   local config="$1"
   local arch
@@ -73,6 +89,7 @@ create_bundle() {
     "${contents}/MacOS/${APP_NAME}"
 
   printf 'APPL????' > "${contents}/PkgInfo"
+  sign_bundle "${bundle}"
 
   echo "Built: ${bundle}"
 }
