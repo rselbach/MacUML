@@ -9,6 +9,7 @@ final class AppSettings: ObservableObject {
     
     @AppStorage("editorFontSize") var editorFontSize: Double = 13
     @AppStorage("editorFontFamily") var editorFontFamily: String = defaultFontFamily
+    @AppStorage("showLineNumbers") var showLineNumbers: Bool = true
     @AppStorage("defaultDiagramTheme") var defaultDiagramTheme: String = "auto"
     
     private init() {

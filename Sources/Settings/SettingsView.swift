@@ -22,6 +22,8 @@ struct SettingsView: View {
                         .monospacedDigit()
                         .frame(width: 45, alignment: .trailing)
                 }
+                
+                Toggle("Show Line Numbers", isOn: $settings.showLineNumbers)
             }
             
             Section("Diagram Preview") {
