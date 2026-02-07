@@ -1,4 +1,5 @@
 import AppKit
+import os
 
 @MainActor
 final class MermaidHighlighter {
@@ -21,10 +22,17 @@ final class MermaidHighlighter {
     private let arrowColor = NSColor.systemBlue
     private let nodeColor = NSColor.systemOrange
     private let directiveColor = NSColor.systemTeal
+    private let logger = Logger(subsystem: "com.macuml", category: "highlighter")
 
     private lazy var keywordPattern: NSRegularExpression? = {
         let pattern = "\\b(" + keywords.joined(separator: "|") + ")\\b"
-        return try? NSRegularExpression(pattern: pattern, options: [])
+
+        do {
+            return try NSRegularExpression(pattern: pattern, options: [])
+        } catch {
+            logger.error("Failed to compile Mermaid keyword regex: \(error.localizedDescription, privacy: .public)")
+            return nil
+        }
     }()
 
     private lazy var patterns: [(NSRegularExpression, NSColor)] = {
@@ -49,8 +57,11 @@ final class MermaidHighlighter {
         ]
 
         for (pattern, color) in patternDefs {
-            if let regex = try? NSRegularExpression(pattern: pattern, options: []) {
+            do {
+                let regex = try NSRegularExpression(pattern: pattern, options: [])
                 result.append((regex, color))
+            } catch {
+                logger.error("Failed to compile Mermaid highlighting regex '\(pattern, privacy: .public)': \(error.localizedDescription, privacy: .public)")
             }
         }
         return result

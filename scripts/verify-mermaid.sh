@@ -1,4 +1,6 @@
 #!/bin/bash
+# Verifies vendored Mermaid metadata in docs matches the actual JS file hash.
+
 set -euo pipefail
 
 readonly MERMAID_FILE="Sources/Resources/mermaid.min.js"
@@ -12,20 +14,20 @@ err() {
 
 extract_version() {
   local file="$1"
-  grep -Eo 'Version: `[^`]+`' "${file}" | head -n1 | sed -E 's/Version: `([^`]+)`/\1/'
+  awk -F'`' '/Version: `[^`]+`/ { print $2; exit }' "${file}"
 }
 
 extract_sha() {
   local file="$1"
-  grep -Eo 'SHA-256: `[0-9a-f]{64}`' "${file}" | head -n1 | sed -E 's/SHA-256: `([0-9a-f]{64})`/\1/'
+  awk -F'`' '/SHA-256: `[0-9a-f]{64}`/ { print $2; exit }' "${file}"
 }
 
 actual_sha="$(shasum -a 256 "${MERMAID_FILE}" | awk '{print $1}')"
 
-readme_version="$(extract_version "${README_FILE}" || true)"
-release_version="$(extract_version "${RELEASING_FILE}" || true)"
-readme_sha="$(extract_sha "${README_FILE}" || true)"
-release_sha="$(extract_sha "${RELEASING_FILE}" || true)"
+readme_version="$(extract_version "${README_FILE}")"
+release_version="$(extract_version "${RELEASING_FILE}")"
+readme_sha="$(extract_sha "${README_FILE}")"
+release_sha="$(extract_sha "${RELEASING_FILE}")"
 
 [[ -n "${readme_version}" ]] || err "Could not find Mermaid version in ${README_FILE}"
 [[ -n "${release_version}" ]] || err "Could not find Mermaid version in ${RELEASING_FILE}"

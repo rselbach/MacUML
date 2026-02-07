@@ -131,7 +131,7 @@ class MermaidRenderer: NSObject, ObservableObject {
             webView.isInspectable = true
         }
 #endif
-        webView.setValue(false, forKey: "drawsBackground")
+        webView.underPageBackgroundColor = .clear
 
         super.init()
         
@@ -316,13 +316,23 @@ class MermaidRenderer: NSObject, ObservableObject {
 
     private func clearDiagram() {
         let js = "document.getElementById('diagram').innerHTML = '';"
-        webView.evaluateJavaScript(js)
+        webView.evaluateJavaScript(js) { [weak self] _, error in
+            guard let self, let error else { return }
+            self.logger.error("Failed to clear preview DOM: \(error.localizedDescription, privacy: .public)")
+        }
     }
 
     private func applyTheme() {
         let js = "window.setTheme('\(theme.rawValue)');"
-        webView.evaluateJavaScript(js) { [weak self] _, _ in
-            guard let self, !self.lastSource.isEmpty else { return }
+        webView.evaluateJavaScript(js) { [weak self] _, error in
+            guard let self else { return }
+
+            if let error {
+                self.logger.error("Failed to apply preview theme '\(self.theme.rawValue, privacy: .public)': \(error.localizedDescription, privacy: .public)")
+                return
+            }
+
+            guard !self.lastSource.isEmpty else { return }
             Task { @MainActor in
                 await self.performRender(source: self.lastSource)
             }
@@ -434,10 +444,17 @@ class MermaidRenderer: NSObject, ObservableObject {
             }
 
             var details = "[]"
-            if let extras = result["extras"] as? [[String: Any]],
-               let data = try? JSONSerialization.data(withJSONObject: extras, options: []),
-               let text = String(data: data, encoding: .utf8) {
-                details = text
+            if let extras = result["extras"] as? [[String: Any]] {
+                do {
+                    let data = try JSONSerialization.data(withJSONObject: extras, options: [])
+                    if let text = String(data: data, encoding: .utf8) {
+                        details = text
+                    } else {
+                        logger.error("Preview DOM audit (\(context, privacy: .public)) failed to decode extras payload as UTF-8")
+                    }
+                } catch {
+                    logger.error("Preview DOM audit (\(context, privacy: .public)) failed to serialize extras payload: \(error.localizedDescription, privacy: .public)")
+                }
             }
 
             logger.error(

@@ -225,7 +225,6 @@ jobs:
         run: |
           VERSION="${APP_VERSION}"
           DMG_FILE=".build/dmg/MacUML-${VERSION}.dmg"
-          DMG_SIZE=$(stat -f%z "${DMG_FILE}")
           PUB_DATE=$(date -u +"%a, %d %b %Y %H:%M:%S %z")
 
           mkdir -p .build/pages

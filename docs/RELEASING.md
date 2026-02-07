@@ -30,7 +30,7 @@ Repository secrets required by the workflow:
    git push origin vX.Y.Z
    ```
 
-3. The release workflow builds/signs/notarizes `MacUML-X.Y.Z.dmg`, uploads GitHub Release assets, and deploys `appcast.xml` via GitHub Pages.
+4. The release workflow builds/signs/notarizes `MacUML-X.Y.Z.dmg`, uploads GitHub Release assets, and deploys `appcast.xml` via GitHub Pages.
 
 ## Manual workflow dispatch
 
