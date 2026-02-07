@@ -63,7 +63,8 @@
             const container = document.getElementById('diagram');
             const useDark = theme === 'dark' ||
                 (window.currentTheme === 'auto' && window.matchMedia('(prefers-color-scheme: dark)').matches);
-            container.className = useDark ? 'dark-bg' : 'light-bg';
+            container.classList.remove('dark-bg', 'light-bg');
+            container.classList.add(useDark ? 'dark-bg' : 'light-bg');
         }
 
         document.addEventListener('DOMContentLoaded', () => {
@@ -120,9 +121,46 @@
         };
 
         window.zoomLevel = 1.0;
+        window.panX = 0;
+        window.panY = 0;
         const ZOOM_STEP = 0.1;
         const ZOOM_MIN = 0.25;
         const ZOOM_MAX = 5.0;
+
+        function hasRenderedSVG() {
+            return document.querySelector('#diagram svg') !== null;
+        }
+
+        function updateInteractionState() {
+            const container = document.getElementById('diagram');
+            if (!container) return;
+            container.classList.toggle('has-diagram', hasRenderedSVG());
+        }
+
+        function applyPan() {
+            const container = document.getElementById('diagram');
+            const panInner = container.querySelector('.pan-inner');
+            if (!panInner) return;
+            panInner.style.transform = 'translate(' + window.panX + 'px, ' + window.panY + 'px)';
+        }
+
+        function panBounds(zoomLevel) {
+            const container = document.getElementById('diagram');
+            const width = container ? container.clientWidth : 0;
+            const height = container ? container.clientHeight : 0;
+            const zoom = Number.isFinite(zoomLevel) ? zoomLevel : window.zoomLevel;
+            const maxX = Math.max(0, ((width * zoom) - width) / 2);
+            const maxY = Math.max(0, ((height * zoom) - height) / 2);
+            return { maxX, maxY };
+        }
+
+        function clampPan(x, y, zoomLevel) {
+            const bounds = panBounds(zoomLevel);
+            return {
+                x: Math.max(-bounds.maxX, Math.min(bounds.maxX, x)),
+                y: Math.max(-bounds.maxY, Math.min(bounds.maxY, y))
+            };
+        }
 
         function applyZoom() {
             const container = document.getElementById('diagram');
@@ -135,8 +173,37 @@
             }
         }
 
-        window.setZoom = function(level) {
-            window.zoomLevel = Math.min(ZOOM_MAX, Math.max(ZOOM_MIN, level));
+        window.setPan = function(x, y) {
+            const clamped = clampPan(x, y, window.zoomLevel);
+            window.panX = clamped.x;
+            window.panY = clamped.y;
+            applyPan();
+            return { x: window.panX, y: window.panY };
+        };
+
+        window.setZoom = function(level, anchorClientX, anchorClientY) {
+            const container = document.getElementById('diagram');
+            const oldZoom = window.zoomLevel;
+            const newZoom = Math.min(ZOOM_MAX, Math.max(ZOOM_MIN, level));
+            let nextPanX = window.panX;
+            let nextPanY = window.panY;
+
+            if (Number.isFinite(anchorClientX) && Number.isFinite(anchorClientY) && oldZoom > 0) {
+                const rect = container.getBoundingClientRect();
+                const localX = anchorClientX - rect.left;
+                const localY = anchorClientY - rect.top;
+                const centerX = container.clientWidth / 2;
+                const centerY = container.clientHeight / 2;
+                const ratio = newZoom / oldZoom;
+                nextPanX = (ratio * window.panX) + ((1 - ratio) * (localX - centerX));
+                nextPanY = (ratio * window.panY) + ((1 - ratio) * (localY - centerY));
+            }
+
+            const clamped = clampPan(nextPanX, nextPanY, newZoom);
+            window.panX = clamped.x;
+            window.panY = clamped.y;
+            window.zoomLevel = newZoom;
+            applyPan();
             applyZoom();
             return window.zoomLevel;
         };
@@ -172,7 +239,77 @@
             svgEl.setAttribute('preserveAspectRatio', 'xMidYMid meet');
         };
 
-        new ResizeObserver(() => window.rescaleSVG()).observe(document.documentElement);
+        new ResizeObserver(() => {
+            window.rescaleSVG();
+            window.setPan(window.panX, window.panY);
+        }).observe(document.documentElement);
+
+        function initInteractions() {
+            const container = document.getElementById('diagram');
+            if (!container || container.dataset.interactionsBound === '1') return;
+            container.dataset.interactionsBound = '1';
+
+            let isPanning = false;
+            let activePointerId = null;
+            let lastX = 0;
+            let lastY = 0;
+            let gestureStartZoom = 1.0;
+
+            container.addEventListener('pointerdown', (event) => {
+                if (event.button !== 0 || !hasRenderedSVG()) return;
+                isPanning = true;
+                activePointerId = event.pointerId;
+                lastX = event.clientX;
+                lastY = event.clientY;
+                container.classList.add('is-panning');
+                container.setPointerCapture(event.pointerId);
+                event.preventDefault();
+            });
+
+            container.addEventListener('pointermove', (event) => {
+                if (!isPanning || event.pointerId !== activePointerId) return;
+                const dx = event.clientX - lastX;
+                const dy = event.clientY - lastY;
+                lastX = event.clientX;
+                lastY = event.clientY;
+                window.setPan(window.panX + dx, window.panY + dy);
+                event.preventDefault();
+            });
+
+            function stopPanning(event) {
+                if (!isPanning) return;
+                if (activePointerId !== null && event.pointerId !== activePointerId) return;
+                isPanning = false;
+                activePointerId = null;
+                container.classList.remove('is-panning');
+            }
+
+            container.addEventListener('pointerup', stopPanning);
+            container.addEventListener('pointercancel', stopPanning);
+            container.addEventListener('lostpointercapture', stopPanning);
+
+            container.addEventListener('wheel', (event) => {
+                if (!hasRenderedSVG()) return;
+                event.preventDefault();
+                const delta = event.deltaY === 0 ? event.deltaX : event.deltaY;
+                if (delta === 0) return;
+                const scaleFactor = Math.exp(-delta * 0.002);
+                const targetZoom = window.zoomLevel * scaleFactor;
+                window.setZoom(targetZoom, event.clientX, event.clientY);
+            }, { passive: false });
+
+            document.addEventListener('gesturestart', (event) => {
+                if (!hasRenderedSVG()) return;
+                gestureStartZoom = window.zoomLevel;
+                event.preventDefault();
+            }, { passive: false });
+
+            document.addEventListener('gesturechange', (event) => {
+                if (!hasRenderedSVG()) return;
+                event.preventDefault();
+                window.setZoom(gestureStartZoom * event.scale, event.clientX, event.clientY);
+            }, { passive: false });
+        }
 
         window.renderDiagram = async function(source) {
             window.lastSource = source;
@@ -198,7 +335,9 @@
                 const hasError = svg.includes('Syntax error') || svg.includes('Parse error');
 
                 if (svg && !hasError) {
-                    container.innerHTML = '<div class="zoom-inner">' + svg + '</div>';
+                    container.innerHTML = '<div class="pan-inner"><div class="zoom-inner">' + svg + '</div></div>';
+                    updateInteractionState();
+                    applyPan();
                     applyZoom();
                     requestAnimationFrame(() => window.rescaleSVG());
                     cleanupUnexpectedBodyNodes('render-success');
@@ -234,6 +373,11 @@
                 cleanupUnexpectedBodyNodes('render-finally');
             }
         };
+
+        document.addEventListener('DOMContentLoaded', () => {
+            initInteractions();
+            updateInteractionState();
+        });
     </script>
     <style>
         * { margin: 0; padding: 0; box-sizing: border-box; }
@@ -256,7 +400,25 @@
             display: flex;
             justify-content: center;
             align-items: center;
-            overflow: auto;
+            overflow: hidden;
+            user-select: none;
+            touch-action: none;
+            cursor: default;
+        }
+        #diagram.has-diagram {
+            cursor: grab;
+        }
+        #diagram.is-panning {
+            cursor: grabbing;
+        }
+        .pan-inner {
+            display: flex;
+            width: 100%;
+            height: 100%;
+            justify-content: center;
+            align-items: center;
+            transform: translate(0px, 0px);
+            will-change: transform;
         }
         .zoom-inner {
             display: flex;
