@@ -23,6 +23,24 @@ struct MermaidRendererSecurityTests {
         #expect(policy == .cancel)
     }
 
+    @Test("Blocks remote HTTP URLs")
+    func blocksRemoteHTTPURL() {
+        let policy = MermaidRenderer.navigationPolicy(for: URL(string: "http://example.com"))
+        #expect(policy == .cancel)
+    }
+
+    @Test("Blocks javascript URLs")
+    func blocksJavaScriptURL() {
+        let policy = MermaidRenderer.navigationPolicy(for: URL(string: "javascript:alert('nope')"))
+        #expect(policy == .cancel)
+    }
+
+    @Test("Blocks data URLs")
+    func blocksDataURL() {
+        let policy = MermaidRenderer.navigationPolicy(for: URL(string: "data:text/plain,hello"))
+        #expect(policy == .cancel)
+    }
+
     @Test("Blocks nil URLs")
     func blocksNilURL() {
         let policy = MermaidRenderer.navigationPolicy(for: nil)
