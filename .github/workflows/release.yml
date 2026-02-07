@@ -26,7 +26,7 @@ jobs:
       - name: Select Xcode 16.3
         run: sudo xcode-select -s /Applications/Xcode_16.3.app/Contents/Developer
 
-      - name: Set version
+      - name: Set and validate version
         id: version
         env:
           EVENT_NAME: ${{ github.event_name }}
@@ -39,6 +39,13 @@ jobs:
           else
             VERSION="0.0.0-dev"
           fi
+
+          VERSION_RE='^[0-9]+\.[0-9]+\.[0-9]+(-[0-9A-Za-z]+([.-][0-9A-Za-z]+)*)?(\+[0-9A-Za-z]+([.-][0-9A-Za-z]+)*)?$'
+          if [[ "${VERSION}" != "0.0.0-dev" ]] && ! [[ "${VERSION}" =~ ${VERSION_RE} ]]; then
+            echo "::error::Invalid version '${VERSION}'. Expected semver like 1.2.3 or 1.2.3-rc.1"
+            exit 1
+          fi
+
           echo "version=${VERSION}" >> "$GITHUB_OUTPUT"
 
       - name: Update version in Info.plist
@@ -49,8 +56,23 @@ jobs:
           /usr/libexec/PlistBuddy -c "Set :CFBundleShortVersionString ${APP_VERSION}" Sources/Info.plist
           /usr/libexec/PlistBuddy -c "Set :CFBundleVersion ${BUILD_NUMBER}" Sources/Info.plist
 
-      - name: Build release
-        run: swift build -c release
+      - name: Build release and assemble app bundle
+        run: |
+          swift build -c release
+          ./scripts/bundle-app.sh release
+
+      - name: Smoke check bundled release assets
+        run: |
+          APP_CONTENTS=".build/release-bundle/MacUML.app/Contents"
+          for path in \
+            "${APP_CONTENTS}/Resources/preview.html" \
+            "${APP_CONTENTS}/Resources/mermaid.min.js" \
+            "${APP_CONTENTS}/Frameworks/Sparkle.framework"; do
+            if [[ ! -e "${path}" ]]; then
+              echo "::error::Missing required bundle artifact: ${path}"
+              exit 1
+            fi
+          done
 
       - name: Import signing certificate
         env:
@@ -76,21 +98,6 @@ jobs:
           security list-keychain -d user -s "${KEYCHAIN_PATH}" login.keychain-db
           
           rm "${RUNNER_TEMP}/certificate.p12"
-
-      - name: Create app bundle
-        run: |
-          APP_BUNDLE=".build/release-bundle/MacUML.app"
-          CONTENTS="${APP_BUNDLE}/Contents"
-          mkdir -p "${CONTENTS}/MacOS" "${CONTENTS}/Resources" "${CONTENTS}/Frameworks"
-          
-          cp .build/release/MacUML "${CONTENTS}/MacOS/MacUML"
-          cp Sources/Info.plist "${CONTENTS}/Info.plist"
-          cp Sources/Resources/AppIcon.icns "${CONTENTS}/Resources/AppIcon.icns"
-          cp Sources/Resources/mermaid.min.js "${CONTENTS}/Resources/mermaid.min.js"
-          
-          cp -R .build/arm64-apple-macosx/release/Sparkle.framework "${CONTENTS}/Frameworks/"
-          
-          install_name_tool -add_rpath @executable_path/../Frameworks "${CONTENTS}/MacOS/MacUML"
 
       - name: Sign app bundle
         run: |
@@ -131,8 +138,6 @@ jobs:
             --sign "Developer ID Application" \
             --entitlements Sources/Entitlements.plist \
             .build/release-bundle/MacUML.app
-          
-          codesign --verify --deep --strict --verbose=2 .build/release-bundle/MacUML.app
 
       - name: Create DMG
         run: |
@@ -154,6 +159,11 @@ jobs:
           rm -rf .build/dmg/staging
           
           codesign --force --sign "Developer ID Application" .build/dmg/MacUML.dmg
+
+      - name: Verify signed artifacts
+        run: |
+          codesign --verify --deep --strict --verbose=2 .build/release-bundle/MacUML.app
+          codesign --verify --strict --verbose=2 .build/dmg/MacUML.dmg
 
       - name: Notarize DMG
         env:

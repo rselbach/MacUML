@@ -80,6 +80,8 @@ class MermaidRenderer: NSObject, ObservableObject {
     let webView: DiagramWebView
     private var lastSource: String = ""
     private var renderTask: Task<Void, Never>?
+    private var previewRuntimeValidationTask: Task<Void, Never>?
+    private var trustedPreviewFiles: Set<URL> = []
     private let debounceInterval: Duration = .milliseconds(300)
     private let logger = Logger(subsystem: "com.macuml", category: "mermaid")
     private var mermaidReady = false
@@ -88,26 +90,43 @@ class MermaidRenderer: NSObject, ObservableObject {
     private let minZoom: Double = 0.25
     private let maxZoom: Double = 5.0
 
-    nonisolated static func navigationPolicy(for requestURL: URL?) -> WKNavigationActionPolicy {
+    nonisolated static func normalizedFileURL(_ url: URL) -> URL {
+        url.standardizedFileURL.resolvingSymlinksInPath()
+    }
+
+    nonisolated static func navigationPolicy(for requestURL: URL?, trustedLocalFiles: Set<URL>) -> WKNavigationActionPolicy {
         guard let requestURL else {
             return .cancel
         }
 
-        if requestURL.isFileURL || requestURL.scheme == "about" {
+        if requestURL.scheme == "about" {
             return .allow
         }
 
-        return .cancel
+        guard requestURL.isFileURL else {
+            return .cancel
+        }
+
+        let normalizedRequestURL = normalizedFileURL(requestURL)
+        return trustedLocalFiles.contains(normalizedRequestURL) ? .allow : .cancel
+    }
+
+    nonisolated static func navigationPolicy(for requestURL: URL?) -> WKNavigationActionPolicy {
+        navigationPolicy(for: requestURL, trustedLocalFiles: [])
     }
 
     override init() {
         let config = WKWebViewConfiguration()
-        config.preferences.setValue(true, forKey: "developerExtrasEnabled")
-        
+
         let contentController = WKUserContentController()
         config.userContentController = contentController
-        
+
         webView = DiagramWebView(frame: .zero, configuration: config)
+#if DEBUG
+        if #available(macOS 13.3, *) {
+            webView.isInspectable = true
+        }
+#endif
         webView.setValue(false, forKey: "drawsBackground")
 
         super.init()
@@ -117,6 +136,7 @@ class MermaidRenderer: NSObject, ObservableObject {
         }
 
         contentController.add(ReadyHandler(renderer: self), name: "ready")
+        contentController.add(ZoomChangedHandler(renderer: self), name: "zoomChanged")
         webView.navigationDelegate = self
         loadBaseHTML()
         
@@ -153,9 +173,7 @@ class MermaidRenderer: NSObject, ObservableObject {
         guard mermaidReady else {
             logger.info("Mermaid not ready, queueing render")
             pendingSource = source
-            Task {
-                await validatePreviewRuntime()
-            }
+            schedulePreviewRuntimeValidation()
             return
         }
 
@@ -307,16 +325,31 @@ class MermaidRenderer: NSObject, ObservableObject {
     }
 
     private func loadBaseHTML() {
-        let previewURL: URL? = Bundle.main.url(forResource: "preview", withExtension: "html")
-            ?? Bundle.module.url(forResource: "preview", withExtension: "html")
+        let previewCandidates = [
+            Bundle.main.url(forResource: "preview", withExtension: "html"),
+            Bundle.module.url(forResource: "preview", withExtension: "html")
+        ].compactMap { $0 }
 
-        guard let previewURL else {
+        guard let previewURL = previewCandidates.first else {
             logger.error("Failed to find bundled preview.html")
             state = .failure("Missing preview renderer resource")
             return
         }
 
-        webView.loadFileURL(previewURL, allowingReadAccessTo: previewURL.deletingLastPathComponent())
+        trustedPreviewFiles = Set(previewCandidates.map(Self.normalizedFileURL))
+        let normalizedPreviewURL = Self.normalizedFileURL(previewURL)
+        webView.loadFileURL(normalizedPreviewURL, allowingReadAccessTo: normalizedPreviewURL.deletingLastPathComponent())
+    }
+
+    private func schedulePreviewRuntimeValidation() {
+        guard previewRuntimeValidationTask == nil else {
+            return
+        }
+
+        previewRuntimeValidationTask = Task { @MainActor in
+            await validatePreviewRuntime()
+            previewRuntimeValidationTask = nil
+        }
     }
 
     private func validatePreviewRuntime() async {
@@ -517,6 +550,28 @@ class MermaidRenderer: NSObject, ObservableObject {
             render(source: source, force: true)
         }
     }
+
+    func handleZoomChangedMessage(_ body: Any) {
+        let rawLevel: Double
+
+        if let value = body as? NSNumber {
+            rawLevel = value.doubleValue
+        } else if let value = body as? Double {
+            rawLevel = value
+        } else if let value = body as? String, let parsed = Double(value) {
+            rawLevel = parsed
+        } else {
+            logger.error("zoomChanged bridge payload is invalid: \(String(describing: body), privacy: .public)")
+            return
+        }
+
+        let normalized = (clampZoom(rawLevel) * 100).rounded() / 100
+        guard abs(normalized - zoomLevel) >= 0.0001 else {
+            return
+        }
+
+        zoomLevel = normalized
+    }
 }
 
 private class ReadyHandler: NSObject, WKScriptMessageHandler {
@@ -529,18 +584,32 @@ private class ReadyHandler: NSObject, WKScriptMessageHandler {
     }
 }
 
+private class ZoomChangedHandler: NSObject, WKScriptMessageHandler {
+    weak var renderer: MermaidRenderer?
+
+    init(renderer: MermaidRenderer) {
+        self.renderer = renderer
+    }
+
+    func userContentController(_ userContentController: WKUserContentController, didReceive message: WKScriptMessage) {
+        Task { @MainActor in
+            renderer?.handleZoomChangedMessage(message.body)
+        }
+    }
+}
+
 extension MermaidRenderer: WKNavigationDelegate {
     func webView(
         _ webView: WKWebView,
         decidePolicyFor navigationAction: WKNavigationAction,
         decisionHandler: @escaping @MainActor @Sendable (WKNavigationActionPolicy) -> Void
     ) {
-        decisionHandler(Self.navigationPolicy(for: navigationAction.request.url))
+        decisionHandler(Self.navigationPolicy(for: navigationAction.request.url, trustedLocalFiles: trustedPreviewFiles))
     }
 
     nonisolated func webView(_ webView: WKWebView, didFinish navigation: WKNavigation!) {
         Task { @MainActor in
-            await validatePreviewRuntime()
+            schedulePreviewRuntimeValidation()
         }
     }
 

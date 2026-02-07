@@ -5,10 +5,34 @@ final class CodeTextView: NSTextView {
     static let indentString = "    "
     private let highlighter = MermaidHighlighter.shared
     private var highlightWorkItem: DispatchWorkItem?
+    private var pendingHighlightRange: NSRange?
     private var errorLine: Int?
+    private var previousErrorRange: NSRange?
+
+    override func shouldChangeText(in affectedCharRange: NSRange, replacementString: String?) -> Bool {
+        let allowed = super.shouldChangeText(in: affectedCharRange, replacementString: replacementString)
+        guard allowed else {
+            return false
+        }
+
+        if let rulerView = enclosingScrollView?.verticalRulerView as? LineNumberRulerView {
+            let currentText = string as NSString
+            if affectedCharRange.location != NSNotFound,
+               affectedCharRange.location <= currentText.length {
+                let safeLength = min(affectedCharRange.length, currentText.length - affectedCharRange.location)
+                let safeRange = NSRange(location: affectedCharRange.location, length: safeLength)
+                let removedNewlines = newlineCount(in: currentText.substring(with: safeRange))
+                let insertedNewlines = newlineCount(in: replacementString ?? "")
+                rulerView.applyLineDelta(insertedNewlines - removedNewlines)
+            }
+        }
+
+        return true
+    }
 
     override func didChangeText() {
         super.didChangeText()
+        queueIncrementalHighlightRange()
         scheduleHighlighting()
     }
 
@@ -16,7 +40,9 @@ final class CodeTextView: NSTextView {
         highlightWorkItem?.cancel()
         let workItem = DispatchWorkItem { [weak self] in
             guard let self, let storage = self.textStorage else { return }
-            self.highlighter.highlight(storage)
+            let range = self.pendingHighlightRange
+            self.pendingHighlightRange = nil
+            self.highlighter.highlight(storage, in: range)
             self.applyErrorHighlighting()
         }
         highlightWorkItem = workItem
@@ -25,8 +51,45 @@ final class CodeTextView: NSTextView {
 
     func applyInitialHighlighting() {
         guard let storage = textStorage else { return }
+        pendingHighlightRange = nil
         highlighter.highlight(storage)
         applyErrorHighlighting()
+    }
+
+    private func queueIncrementalHighlightRange() {
+        guard let storage = textStorage else { return }
+        let editedRange = storage.editedRange
+        guard editedRange.location != NSNotFound,
+              editedRange.location <= storage.length else {
+            return
+        }
+
+        let text = storage.string as NSString
+        let safeLength = min(editedRange.length, max(0, text.length - editedRange.location))
+        var range = NSRange(location: editedRange.location, length: safeLength)
+        range = text.lineRange(for: range)
+
+        if range.location > 0 {
+            range = text.lineRange(for: NSRange(location: range.location - 1, length: range.length + 1))
+        }
+        if NSMaxRange(range) < text.length {
+            range = text.lineRange(for: NSRange(location: range.location, length: range.length + 1))
+        }
+
+        if let pendingHighlightRange {
+            self.pendingHighlightRange = NSUnionRange(pendingHighlightRange, range)
+            return
+        }
+
+        pendingHighlightRange = range
+    }
+
+    private func newlineCount(in value: String) -> Int {
+        value.reduce(into: 0) { count, char in
+            if char == "\n" {
+                count += 1
+            }
+        }
     }
     
     func setErrorLine(_ line: Int?) {
@@ -38,29 +101,63 @@ final class CodeTextView: NSTextView {
     private func applyErrorHighlighting() {
         guard let storage = textStorage else { return }
         let text = storage.string as NSString
-        let fullRange = NSRange(location: 0, length: storage.length)
-        
-        storage.removeAttribute(.underlineStyle, range: fullRange)
-        storage.removeAttribute(.underlineColor, range: fullRange)
-        storage.removeAttribute(.backgroundColor, range: fullRange)
-        
-        guard let errorLine, errorLine > 0 else { return }
-        
+
+        if let previousErrorRange {
+            removeErrorAttributes(in: previousErrorRange, storage: storage)
+            self.previousErrorRange = nil
+        }
+
+        guard let errorLine, let range = lineRange(for: errorLine, in: text) else { return }
+
+        storage.addAttribute(.backgroundColor, value: NSColor.systemRed.withAlphaComponent(0.2), range: range)
+        storage.addAttribute(.underlineStyle, value: NSUnderlineStyle.single.rawValue, range: range)
+        storage.addAttribute(.underlineColor, value: NSColor.systemRed, range: range)
+        previousErrorRange = range
+    }
+
+    private func removeErrorAttributes(in range: NSRange, storage: NSTextStorage) {
+        guard let clampedRange = clampedRange(range, maxLength: storage.length) else { return }
+        storage.removeAttribute(.underlineStyle, range: clampedRange)
+        storage.removeAttribute(.underlineColor, range: clampedRange)
+        storage.removeAttribute(.backgroundColor, range: clampedRange)
+    }
+
+    private func clampedRange(_ range: NSRange, maxLength: Int) -> NSRange? {
+        guard maxLength > 0,
+              range.location != NSNotFound,
+              range.location < maxLength else {
+            return nil
+        }
+
+        let documentRange = NSRange(location: 0, length: maxLength)
+        let clampedRange = NSIntersectionRange(range, documentRange)
+        guard clampedRange.length > 0 else {
+            return nil
+        }
+
+        return clampedRange
+    }
+
+    private func lineRange(for oneBasedLine: Int, in text: NSString) -> NSRange? {
+        guard oneBasedLine > 0 else {
+            return nil
+        }
+
         var currentLine = 1
         var lineStart = 0
-        
-        while currentLine < errorLine && lineStart < text.length {
-            let lineRange = text.lineRange(for: NSRange(location: lineStart, length: 0))
-            lineStart = lineRange.upperBound
+
+        while currentLine < oneBasedLine && lineStart < text.length {
+            let currentRange = text.lineRange(for: NSRange(location: lineStart, length: 0))
+            lineStart = currentRange.upperBound
             currentLine += 1
         }
-        
-        if currentLine == errorLine && lineStart < text.length {
-            let lineRange = text.lineRange(for: NSRange(location: lineStart, length: 0))
-            storage.addAttribute(.backgroundColor, value: NSColor.systemRed.withAlphaComponent(0.2), range: lineRange)
-            storage.addAttribute(.underlineStyle, value: NSUnderlineStyle.single.rawValue, range: lineRange)
-            storage.addAttribute(.underlineColor, value: NSColor.systemRed, range: lineRange)
+
+        guard currentLine == oneBasedLine,
+              lineStart < text.length else {
+            return nil
         }
+
+        return text.lineRange(for: NSRange(location: lineStart, length: 0))
     }
     
     override func keyDown(with event: NSEvent) {
@@ -215,6 +312,8 @@ final class LineNumberRulerView: NSRulerView {
 
     private let minThickness: CGFloat = 36
     private let horizontalPadding: CGFloat = 8
+    private var cachedLineCount = 1
+    private var lineStartOffsets: [Int] = [0]
 
     init(textView: NSTextView) {
         guard let scrollView = textView.enclosingScrollView else {
@@ -224,6 +323,7 @@ final class LineNumberRulerView: NSRulerView {
         self.textView = textView
         super.init(scrollView: scrollView, orientation: .verticalRuler)
         clientView = textView
+        rebuildLineMetadata(using: textView.string)
         configureObservers()
         recalculateThickness()
     }
@@ -237,16 +337,39 @@ final class LineNumberRulerView: NSRulerView {
     }
 
     func refresh(using editorFont: NSFont) {
+        let newFont = NSFont.monospacedDigitSystemFont(ofSize: max(10, editorFont.pointSize * 0.85), weight: .regular)
+        let oldFont = lineNumberAttributes[.font] as? NSFont
+        guard oldFont?.pointSize != newFont.pointSize else {
+            return
+        }
+
         lineNumberAttributes = [
-            .font: NSFont.monospacedDigitSystemFont(ofSize: max(10, editorFont.pointSize * 0.85), weight: .regular),
+            .font: newFont,
             .foregroundColor: NSColor.secondaryLabelColor
         ]
         recalculateThickness()
         needsDisplay = true
     }
 
-    func invalidateLineNumbers() {
+    func resetLineCount(using text: String) {
+        rebuildLineMetadata(using: text)
         recalculateThickness()
+        needsDisplay = true
+    }
+
+    func applyLineDelta(_ delta: Int) {
+        guard delta != 0 else {
+            return
+        }
+
+        let oldDigits = String(max(1, cachedLineCount)).count
+        cachedLineCount = max(1, cachedLineCount + delta)
+        let newDigits = String(max(1, cachedLineCount)).count
+
+        if oldDigits != newDigits {
+            recalculateThickness()
+        }
+
         needsDisplay = true
     }
 
@@ -274,7 +397,7 @@ final class LineNumberRulerView: NSRulerView {
             return
         }
 
-        let firstVisibleLine = lineNumber(for: glyphRange.location, layoutManager: layoutManager, text: text)
+        let firstVisibleLine = lineNumber(for: glyphRange.location, layoutManager: layoutManager)
         var currentLine = firstVisibleLine
         var lastLineLocation = NSNotFound
         let rulerOffset = convert(.zero, from: textView).y
@@ -320,16 +443,15 @@ final class LineNumberRulerView: NSRulerView {
 
     @objc
     private func handleTextChanged(_ notification: Notification) {
-        invalidateLineNumbers()
+        if let textView = notification.object as? NSTextView {
+            rebuildLineMetadata(using: textView.string)
+            recalculateThickness()
+        }
+        needsDisplay = true
     }
 
     private func recalculateThickness() {
-        guard let textView else { return }
-
-        let lineCount = max(1, textView.string.reduce(into: 1) { count, char in
-            if char == "\n" { count += 1 }
-        })
-        let digits = String(lineCount).count
+        let digits = String(max(1, cachedLineCount)).count
         let sample = String(repeating: "8", count: digits) as NSString
         let labelWidth = sample.size(withAttributes: lineNumberAttributes).width
         let targetThickness = max(minThickness, ceil(labelWidth + (horizontalPadding * 2)))
@@ -339,7 +461,7 @@ final class LineNumberRulerView: NSRulerView {
         }
     }
 
-    private func lineNumber(for glyphLocation: Int, layoutManager: NSLayoutManager, text: NSString) -> Int {
+    private func lineNumber(for glyphLocation: Int, layoutManager: NSLayoutManager) -> Int {
         guard layoutManager.numberOfGlyphs > 0 else { return 1 }
 
         let glyphIndex = min(max(glyphLocation, 0), layoutManager.numberOfGlyphs - 1)
@@ -347,10 +469,35 @@ final class LineNumberRulerView: NSRulerView {
 
         guard charIndex > 0 else { return 1 }
 
-        let prefix = text.substring(with: NSRange(location: 0, length: charIndex))
-        return prefix.reduce(into: 1) { line, char in
-            if char == "\n" { line += 1 }
+        var low = 0
+        var high = lineStartOffsets.count
+
+        while low < high {
+            let mid = (low + high) / 2
+            if lineStartOffsets[mid] <= charIndex {
+                low = mid + 1
+                continue
+            }
+            high = mid
         }
+
+        return max(1, low)
+    }
+
+    private func rebuildLineMetadata(using text: String) {
+        lineStartOffsets = [0]
+        if text.isEmpty {
+            cachedLineCount = 1
+            return
+        }
+
+        for (offset, character) in text.enumerated() {
+            if character == "\n" {
+                lineStartOffsets.append(offset + 1)
+            }
+        }
+
+        cachedLineCount = max(1, lineStartOffsets.count)
     }
 
     private func draw(lineNumber: Int, atY y: CGFloat) {
@@ -410,22 +557,31 @@ struct EditorView: NSViewRepresentable {
 
     func updateNSView(_ scrollView: NSScrollView, context: Context) {
         guard let textView = scrollView.documentView as? CodeTextView else { return }
-        
-        textView.font = settings.editorFont
+        let fontChanged = textView.font != settings.editorFont
+        if fontChanged {
+            textView.font = settings.editorFont
+        }
         
         if textView.string != text {
             let selectedRanges = textView.selectedRanges
             textView.string = text
             textView.selectedRanges = selectedRanges
             textView.applyInitialHighlighting()
+
+            if let rulerView = scrollView.verticalRulerView as? LineNumberRulerView {
+                rulerView.resetLineCount(using: text)
+            }
         }
 
-        scrollView.hasVerticalRuler = settings.showLineNumbers
-        scrollView.rulersVisible = settings.showLineNumbers
+        if scrollView.hasVerticalRuler != settings.showLineNumbers {
+            scrollView.hasVerticalRuler = settings.showLineNumbers
+        }
+        if scrollView.rulersVisible != settings.showLineNumbers {
+            scrollView.rulersVisible = settings.showLineNumbers
+        }
 
-        if let rulerView = scrollView.verticalRulerView as? LineNumberRulerView {
+        if fontChanged, let rulerView = scrollView.verticalRulerView as? LineNumberRulerView {
             rulerView.refresh(using: settings.editorFont)
-            rulerView.invalidateLineNumbers()
         }
 
         textView.setErrorLine(errorLine)
