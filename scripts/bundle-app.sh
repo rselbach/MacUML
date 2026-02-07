@@ -20,21 +20,30 @@ detect_arch() {
   uname -m
 }
 
+swift_bin_path() {
+  local config="$1"
+  swift build -c "${config}" --show-bin-path
+}
+
 find_sparkle() {
-  local arch="$1" config="$2"
-  local candidate="${PROJECT_ROOT}/.build/${arch}-apple-macosx/${config}/Sparkle.framework"
-  if [[ -d "${candidate}" ]]; then
-    echo "${candidate}"
-    return
-  fi
+  local bin_path="$1" arch="$2" config="$3"
 
-  candidate="${PROJECT_ROOT}/.build/artifacts/sparkle/Sparkle/Sparkle.framework"
-  if [[ -d "${candidate}" ]]; then
-    echo "${candidate}"
-    return
-  fi
+  local candidates=(
+    "${bin_path}/Sparkle.framework"
+    "$(dirname "${bin_path}")/Sparkle.framework"
+    "${PROJECT_ROOT}/.build/${arch}-apple-macosx/${config}/Sparkle.framework"
+    "${PROJECT_ROOT}/.build/artifacts/sparkle/Sparkle/Sparkle.framework"
+  )
 
-  err "Sparkle.framework not found; run 'swift build' first"
+  local candidate
+  for candidate in "${candidates[@]}"; do
+    if [[ -d "${candidate}" ]]; then
+      echo "${candidate}"
+      return
+    fi
+  done
+
+  err "Sparkle.framework not found; run 'swift build -c ${config}' first"
 }
 
 sign_bundle() {
@@ -58,13 +67,15 @@ create_bundle() {
   local arch
   arch="$(detect_arch)"
 
-  local build_dir="${PROJECT_ROOT}/.build/${arch}-apple-macosx/${config}"
-  local executable="${build_dir}/${APP_NAME}"
+  local bin_path
+  bin_path="$(swift_bin_path "${config}")"
+
+  local executable="${bin_path}/${APP_NAME}"
   local bundle="${PROJECT_ROOT}/.build/${config}-bundle/${APP_NAME}.app"
   local contents="${bundle}/Contents"
 
   [[ -f "${executable}" ]] \
-    || err "executable not found at ${executable}; run 'swift build' first"
+    || err "executable not found at ${executable}; run 'swift build -c ${config}' first"
 
   rm -rf "${bundle}"
   mkdir -p "${contents}/MacOS" \
@@ -81,7 +92,7 @@ create_bundle() {
      "${contents}/Resources/preview.html"
 
   local sparkle
-  sparkle="$(find_sparkle "${arch}" "${config}")"
+  sparkle="$(find_sparkle "${bin_path}" "${arch}" "${config}")"
   cp -R "${sparkle}" "${contents}/Frameworks/"
 
   install_name_tool -add_rpath \

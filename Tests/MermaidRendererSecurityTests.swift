@@ -39,13 +39,22 @@ struct MermaidRendererSecurityTests {
         #expect(policy == .cancel)
     }
 
-    @Test("Allows about scheme")
-    func allowsAboutScheme() {
+    @Test("Allows about:blank")
+    func allowsAboutBlank() {
         let policy = MermaidRenderer.navigationPolicy(
             for: URL(string: "about:blank"),
             trustedLocalFiles: trustedLocalFiles
         )
         #expect(policy == .allow)
+    }
+
+    @Test("Blocks non-blank about URLs")
+    func blocksNonBlankAboutURL() {
+        let policy = MermaidRenderer.navigationPolicy(
+            for: URL(string: "about:config"),
+            trustedLocalFiles: trustedLocalFiles
+        )
+        #expect(policy == .cancel)
     }
 
     @Test("Blocks remote HTTPS URLs")

@@ -16,7 +16,14 @@ Repository secrets required by the workflow:
 ## Create a release
 
 1. Ensure `main` is green in CI.
-2. Create and push a version tag:
+2. Verify vendored Mermaid provenance metadata and entitlements policy locally:
+
+   ```bash
+   ./scripts/verify-mermaid.sh
+   ./scripts/verify-entitlements.sh
+   ```
+
+3. Create and push a version tag:
 
    ```bash
    git tag vX.Y.Z

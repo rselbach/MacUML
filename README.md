@@ -34,6 +34,7 @@ Download the latest DMG from [Releases](https://github.com/rselbach/MacUML/relea
 ```bash
 just build
 just test
+just verify-security
 just bundle
 just run
 ```
@@ -57,6 +58,16 @@ MacUML vendors Mermaid at `Sources/Resources/mermaid.min.js`.
 - SHA-256: `d0830a6c05546e9edb8fe20a8f545f3e0dc7c4c3134d584bad9c13a99d7a71e0`
 
 See `RELEASING.md` for update and provenance steps.
+
+## Security-sensitive entitlements
+
+MacUML ships sandboxed and keeps entitlements intentionally narrow.
+
+- `com.apple.security.network.client`: required for Sparkle update checks/downloads
+- `com.apple.security.files.user-selected.read-write`: user-opened/saved files
+- Sparkle mach-lookup temporary exceptions for updater helper services
+
+Policy is enforced by `scripts/verify-entitlements.sh` in CI.
 
 ## License
 

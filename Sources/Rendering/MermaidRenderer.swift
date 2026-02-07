@@ -100,7 +100,8 @@ class MermaidRenderer: NSObject, ObservableObject {
         }
 
         if requestURL.scheme == "about" {
-            return .allow
+            let aboutURL = requestURL.absoluteString.lowercased()
+            return (aboutURL == "about:blank" || aboutURL == "about:srcdoc") ? .allow : .cancel
         }
 
         guard requestURL.isFileURL else {
@@ -117,6 +118,9 @@ class MermaidRenderer: NSObject, ObservableObject {
 
     override init() {
         let config = WKWebViewConfiguration()
+        config.websiteDataStore = .nonPersistent()
+        config.preferences.javaScriptCanOpenWindowsAutomatically = false
+        config.defaultWebpagePreferences.allowsContentJavaScript = true
 
         let contentController = WKUserContentController()
         config.userContentController = contentController
@@ -138,6 +142,7 @@ class MermaidRenderer: NSObject, ObservableObject {
         contentController.add(ReadyHandler(renderer: self), name: "ready")
         contentController.add(ZoomChangedHandler(renderer: self), name: "zoomChanged")
         webView.navigationDelegate = self
+        webView.uiDelegate = self
         loadBaseHTML()
         
         webView.copyPNGHandler = { [weak self] in
@@ -578,6 +583,10 @@ private class ReadyHandler: NSObject, WKScriptMessageHandler {
     weak var renderer: MermaidRenderer?
     init(renderer: MermaidRenderer) { self.renderer = renderer }
     func userContentController(_ userContentController: WKUserContentController, didReceive message: WKScriptMessage) {
+        guard message.name == "ready", message.frameInfo.isMainFrame else {
+            return
+        }
+
         Task { @MainActor in
             renderer?.handleMermaidReady()
         }
@@ -592,6 +601,10 @@ private class ZoomChangedHandler: NSObject, WKScriptMessageHandler {
     }
 
     func userContentController(_ userContentController: WKUserContentController, didReceive message: WKScriptMessage) {
+        guard message.name == "zoomChanged", message.frameInfo.isMainFrame else {
+            return
+        }
+
         Task { @MainActor in
             renderer?.handleZoomChangedMessage(message.body)
         }
@@ -618,5 +631,16 @@ extension MermaidRenderer: WKNavigationDelegate {
             logger.error("Navigation failed: \(error.localizedDescription)")
             state = .failure("Failed to load renderer")
         }
+    }
+}
+
+extension MermaidRenderer: WKUIDelegate {
+    func webView(
+        _ webView: WKWebView,
+        createWebViewWith configuration: WKWebViewConfiguration,
+        for navigationAction: WKNavigationAction,
+        windowFeatures: WKWindowFeatures
+    ) -> WKWebView? {
+        nil
     }
 }

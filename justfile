@@ -4,6 +4,14 @@ build:
 test:
     swift test
 
+verify-mermaid:
+    ./scripts/verify-mermaid.sh
+
+verify-entitlements:
+    ./scripts/verify-entitlements.sh
+
+verify-security: verify-mermaid verify-entitlements
+
 bundle: build
     ./scripts/bundle-app.sh
 

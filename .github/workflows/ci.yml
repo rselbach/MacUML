@@ -20,5 +20,11 @@ jobs:
       - name: Select Xcode 16.3
         run: sudo xcode-select -s /Applications/Xcode_16.3.app/Contents/Developer
 
+      - name: Verify Mermaid provenance metadata
+        run: ./scripts/verify-mermaid.sh
+
+      - name: Verify entitlements policy
+        run: ./scripts/verify-entitlements.sh
+
       - name: Build and test (release config)
         run: swift test -c release

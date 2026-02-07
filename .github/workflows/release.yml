@@ -56,6 +56,12 @@ jobs:
           /usr/libexec/PlistBuddy -c "Set :CFBundleShortVersionString ${APP_VERSION}" Sources/Info.plist
           /usr/libexec/PlistBuddy -c "Set :CFBundleVersion ${BUILD_NUMBER}" Sources/Info.plist
 
+      - name: Verify Mermaid provenance metadata
+        run: ./scripts/verify-mermaid.sh
+
+      - name: Verify entitlements policy
+        run: ./scripts/verify-entitlements.sh
+
       - name: Build release and assemble app bundle
         run: |
           swift build -c release
@@ -100,65 +106,81 @@ jobs:
           rm "${RUNNER_TEMP}/certificate.p12"
 
       - name: Sign app bundle
+        env:
+          APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
         run: |
           SPARKLE_FW=".build/release-bundle/MacUML.app/Contents/Frameworks/Sparkle.framework"
-          
+          SIGNING_IDENTITY="$(security find-identity -v -p codesigning | grep "Developer ID Application" | grep "(${APPLE_TEAM_ID})" | head -n1 | sed -E 's/.*"(.*)"/\1/')"
+
+          if [[ -z "${SIGNING_IDENTITY}" ]]; then
+            echo "::error::Could not resolve Developer ID Application identity for team ${APPLE_TEAM_ID}"
+            exit 1
+          fi
+
           # Sign Sparkle XPC services individually (no entitlements - they must not be sandboxed)
           codesign --force --options runtime \
-            --sign "Developer ID Application" \
+            --sign "${SIGNING_IDENTITY}" \
             "${SPARKLE_FW}/Versions/B/XPCServices/Installer.xpc"
-          
+
           codesign --force --options runtime \
-            --sign "Developer ID Application" \
+            --sign "${SIGNING_IDENTITY}" \
             --preserve-metadata=entitlements \
             "${SPARKLE_FW}/Versions/B/XPCServices/Downloader.xpc"
-          
+
           # Sign Sparkle helper apps
           codesign --force --options runtime \
-            --sign "Developer ID Application" \
+            --sign "${SIGNING_IDENTITY}" \
             "${SPARKLE_FW}/Versions/B/Autoupdate"
-          
+
           codesign --force --options runtime \
-            --sign "Developer ID Application" \
+            --sign "${SIGNING_IDENTITY}" \
             "${SPARKLE_FW}/Versions/B/Updater.app"
-          
+
           # Sign Sparkle framework itself
           codesign --force --options runtime \
-            --sign "Developer ID Application" \
+            --sign "${SIGNING_IDENTITY}" \
             "${SPARKLE_FW}"
-          
+
           # Sign main executable with entitlements
           codesign --force --options runtime \
-            --sign "Developer ID Application" \
+            --sign "${SIGNING_IDENTITY}" \
             --entitlements Sources/Entitlements.plist \
             .build/release-bundle/MacUML.app/Contents/MacOS/MacUML
-          
+
           # Sign app bundle with entitlements
           codesign --force --options runtime \
-            --sign "Developer ID Application" \
+            --sign "${SIGNING_IDENTITY}" \
             --entitlements Sources/Entitlements.plist \
             .build/release-bundle/MacUML.app
 
       - name: Create DMG
+        env:
+          APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
         run: |
           mkdir -p .build/dmg/staging
           cp -R .build/release-bundle/MacUML.app .build/dmg/staging/
           ln -s /Applications .build/dmg/staging/Applications
-          
+
           hdiutil create -volname "MacUML" \
             -srcfolder .build/dmg/staging \
             -ov -format UDRW \
             .build/dmg/MacUML-temp.dmg
-          
+
           hdiutil convert .build/dmg/MacUML-temp.dmg \
             -format UDZO \
             -imagekey zlib-level=9 \
             -o .build/dmg/MacUML.dmg
-          
+
           rm .build/dmg/MacUML-temp.dmg
           rm -rf .build/dmg/staging
-          
-          codesign --force --sign "Developer ID Application" .build/dmg/MacUML.dmg
+
+          SIGNING_IDENTITY="$(security find-identity -v -p codesigning | grep "Developer ID Application" | grep "(${APPLE_TEAM_ID})" | head -n1 | sed -E 's/.*"(.*)"/\1/')"
+          if [[ -z "${SIGNING_IDENTITY}" ]]; then
+            echo "::error::Could not resolve Developer ID Application identity for team ${APPLE_TEAM_ID}"
+            exit 1
+          fi
+
+          codesign --force --sign "${SIGNING_IDENTITY}" .build/dmg/MacUML.dmg
 
       - name: Verify signed artifacts
         run: |

@@ -76,7 +76,7 @@ struct MermaidHighlighterTests {
         let label: String
     }
 
-    nonisolated(unsafe) static let stringCases: [StringTestCase] = [
+    nonisolated static let stringCases: [StringTestCase] = [
         StringTestCase(text: "\"hello world\"", start: 0, end: 12, label: "double-quoted string"),
         StringTestCase(text: "'hello'", start: 0, end: 6, label: "single-quoted string"),
         StringTestCase(text: "|label text|", start: 0, end: 11, label: "pipe-delimited string"),
@@ -102,7 +102,7 @@ struct MermaidHighlighterTests {
         let label: String
     }
 
-    nonisolated(unsafe) static let arrowCases: [ArrowTestCase] = [
+    nonisolated static let arrowCases: [ArrowTestCase] = [
         ArrowTestCase(text: "A-->>B", arrowStart: 1, arrowEnd: 4, label: "-->>"),
         ArrowTestCase(text: "A-->B", arrowStart: 1, arrowEnd: 3, label: "-->"),
         ArrowTestCase(text: "A==>B", arrowStart: 1, arrowEnd: 3, label: "==>"),
@@ -129,7 +129,7 @@ struct MermaidHighlighterTests {
         let label: String
     }
 
-    nonisolated(unsafe) static let nodeCases: [NodeTestCase] = [
+    nonisolated static let nodeCases: [NodeTestCase] = [
         NodeTestCase(text: "A[Box Label]", nodeStart: 1, nodeEnd: 11, label: "square brackets"),
         NodeTestCase(text: "A(Round Label)", nodeStart: 1, nodeEnd: 13, label: "parentheses"),
         NodeTestCase(text: "A{Diamond}", nodeStart: 1, nodeEnd: 9, label: "curly braces"),

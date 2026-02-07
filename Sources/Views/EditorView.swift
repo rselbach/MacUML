@@ -491,10 +491,16 @@ final class LineNumberRulerView: NSRulerView {
             return
         }
 
-        for (offset, character) in text.enumerated() {
-            if character == "\n" {
-                lineStartOffsets.append(offset + 1)
+        let nsText = text as NSString
+        var location = 0
+
+        while location < nsText.length {
+            let lineRange = nsText.lineRange(for: NSRange(location: location, length: 0))
+            let nextLineStart = NSMaxRange(lineRange)
+            if nextLineStart < nsText.length {
+                lineStartOffsets.append(nextLineStart)
             }
+            location = nextLineStart
         }
 
         cachedLineCount = max(1, lineStartOffsets.count)
