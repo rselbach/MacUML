@@ -1,4 +1,5 @@
 import SwiftUI
+import AppKit
 
 struct DocumentView: View {
     @Binding var document: MermaidDocument
@@ -41,10 +42,24 @@ struct DocumentView: View {
             }
             
             Text(error.message)
-                .lineLimit(1)
+                .lineLimit(3)
                 .truncationMode(.tail)
             
             Spacer()
+
+            Button("Copy") {
+                let pasteboard = NSPasteboard.general
+                pasteboard.clearContents()
+
+                if let line = error.line {
+                    pasteboard.setString("Line \(line): \(error.message)", forType: .string)
+                    return
+                }
+
+                pasteboard.setString(error.message, forType: .string)
+            }
+            .buttonStyle(.borderless)
+            .foregroundStyle(.white.opacity(0.9))
         }
         .font(.caption)
         .foregroundStyle(.white)
