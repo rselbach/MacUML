@@ -91,6 +91,18 @@ class MermaidRenderer: NSObject, ObservableObject {
 #endif
     }()
 
+    nonisolated static func navigationPolicy(for requestURL: URL?) -> WKNavigationActionPolicy {
+        guard let requestURL else {
+            return .cancel
+        }
+
+        if requestURL.isFileURL || requestURL.scheme == "about" {
+            return .allow
+        }
+
+        return .cancel
+    }
+
     override init() {
         let config = WKWebViewConfiguration()
 #if DEBUG
@@ -611,17 +623,7 @@ extension MermaidRenderer: WKNavigationDelegate {
         decidePolicyFor navigationAction: WKNavigationAction,
         decisionHandler: @escaping @MainActor @Sendable (WKNavigationActionPolicy) -> Void
     ) {
-        guard let requestURL = navigationAction.request.url else {
-            decisionHandler(.cancel)
-            return
-        }
-
-        if requestURL.isFileURL || requestURL.scheme == "about" {
-            decisionHandler(.allow)
-            return
-        }
-
-        decisionHandler(.cancel)
+        decisionHandler(Self.navigationPolicy(for: navigationAction.request.url))
     }
 
     func webView(_ webView: WKWebView, didFinish navigation: WKNavigation!) {
