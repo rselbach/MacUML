@@ -194,19 +194,24 @@ class MermaidRenderer: NSObject, ObservableObject {
     }
 
     private func loadBaseHTML() {
-        let previewCandidates = [
-            Bundle.main.url(forResource: "preview", withExtension: "html"),
-            Bundle.module.url(forResource: "preview", withExtension: "html")
-        ].compactMap { $0 }
+        // Bundle.module uses a SwiftPM-generated accessor that calls fatalError
+        // when the resource bundle isn't found. In released .app bundles the
+        // resource bundle doesn't exist (resources are copied loose into
+        // Contents/Resources/ by bundle-app.sh), so we must avoid accessing
+        // Bundle.module when Bundle.main already has the file.  The ??
+        // operator's @autoclosure right-hand side gives us exactly that:
+        // Bundle.module is never evaluated when Bundle.main succeeds.
+        let previewURL = Bundle.main.url(forResource: "preview", withExtension: "html")
+            ?? Bundle.module.url(forResource: "preview", withExtension: "html")
 
-        guard let previewURL = previewCandidates.first else {
+        guard let previewURL else {
             logger.error("Failed to find bundled preview.html")
             state = .failure("Missing preview renderer resource")
             return
         }
 
-        trustedPreviewFiles = Set(previewCandidates.map(Self.normalizedFileURL))
         let normalizedPreviewURL = Self.normalizedFileURL(previewURL)
+        trustedPreviewFiles = [normalizedPreviewURL]
         webView.loadFileURL(normalizedPreviewURL, allowingReadAccessTo: normalizedPreviewURL.deletingLastPathComponent())
     }
 
