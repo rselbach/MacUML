@@ -20,23 +20,12 @@ struct DocumentView: View {
                 .frame(minWidth: 300)
         }
         .frame(minWidth: 700, minHeight: 500)
+        .focusedValue(\.renderer, renderer)
         .onChange(of: document.text) { _, newValue in
             renderer.render(source: newValue)
         }
         .onAppear {
             renderer.render(source: document.text)
-        }
-        .onReceive(NotificationCenter.default.publisher(for: .refreshPreview)) { _ in
-            renderer.render(source: document.text, force: true)
-        }
-        .onReceive(NotificationCenter.default.publisher(for: .zoomIn)) { _ in
-            renderer.zoomIn()
-        }
-        .onReceive(NotificationCenter.default.publisher(for: .zoomOut)) { _ in
-            renderer.zoomOut()
-        }
-        .onReceive(NotificationCenter.default.publisher(for: .zoomReset)) { _ in
-            renderer.resetZoom()
         }
     }
     
@@ -69,11 +58,14 @@ struct DocumentView: View {
             }
             .buttonStyle(.borderless)
             .foregroundStyle(.white.opacity(0.9))
+            .accessibilityLabel("Copy Error Message")
         }
         .font(.caption)
         .foregroundStyle(.white)
         .padding(.horizontal, 8)
         .padding(.vertical, 4)
         .background(Color.red.opacity(0.85))
+        .accessibilityElement(children: .combine)
+        .accessibilityLabel("Diagram Error")
     }
 }

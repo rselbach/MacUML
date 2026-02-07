@@ -62,6 +62,9 @@ jobs:
       - name: Verify entitlements policy
         run: ./scripts/verify-entitlements.sh
 
+      - name: Run tests
+        run: swift test -c release
+
       - name: Build release and assemble app bundle
         run: |
           swift build -c release

@@ -45,6 +45,7 @@ struct PreviewPane: View {
                     Image(systemName: "minus.magnifyingglass")
                 }
                 .help("Zoom Out")
+                .accessibilityLabel("Zoom Out")
                 
                 Button {
                     renderer.zoomIn()
@@ -52,6 +53,7 @@ struct PreviewPane: View {
                     Image(systemName: "plus.magnifyingglass")
                 }
                 .help("Zoom In")
+                .accessibilityLabel("Zoom In")
                 
                 Button {
                     renderer.resetZoom()
@@ -60,11 +62,13 @@ struct PreviewPane: View {
                         .font(.caption.monospacedDigit())
                 }
                 .help("Actual Size")
+                .accessibilityLabel("Reset Zoom to Actual Size")
 
                 Text("\(Int((renderer.zoomLevel * 100).rounded()))%")
                     .font(.caption.monospacedDigit())
                     .foregroundStyle(.secondary)
                     .frame(minWidth: 42, alignment: .trailing)
+                    .accessibilityLabel("Zoom level \(Int((renderer.zoomLevel * 100).rounded())) percent")
             }
 
             Spacer()
@@ -81,6 +85,7 @@ struct PreviewPane: View {
                 }
                 .pickerStyle(.menu)
                 .fixedSize()
+                .accessibilityLabel("Diagram Theme")
             }
         }
         .padding(.horizontal, 12)

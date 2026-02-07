@@ -3,19 +3,20 @@ import WebKit
 
 extension MermaidRenderer {
     internal func applyTheme() {
-        let js = "window.setTheme('\(theme.rawValue)');"
-        webView.evaluateJavaScript(js) { [weak self] _, error in
-            guard let self else { return }
-
-            if let error {
+        Task {
+            do {
+                _ = try await webView.callAsyncJavaScript(
+                    "window.setTheme(themeName);",
+                    arguments: ["themeName": self.theme.rawValue],
+                    contentWorld: .page
+                )
+            } catch {
                 self.logger.error("Failed to apply preview theme '\(self.theme.rawValue, privacy: .public)': \(error.localizedDescription, privacy: .public)")
                 return
             }
 
             guard !self.lastSource.isEmpty else { return }
-            Task { @MainActor in
-                await self.performRender(source: self.lastSource)
-            }
+            await self.performRender(source: self.lastSource)
         }
     }
 }

@@ -28,8 +28,8 @@ struct SettingsView: View {
             
             Section("Diagram Preview") {
                 Picker("Default Theme:", selection: $settings.defaultDiagramTheme) {
-                    ForEach(MermaidTheme.allCases, id: \.rawValue) { theme in
-                        Text(theme.label).tag(theme.rawValue)
+                    ForEach(MermaidTheme.allCases, id: \.self) { theme in
+                        Text(theme.label).tag(theme)
                     }
                 }
                 .pickerStyle(.menu)

@@ -17,6 +17,7 @@ class AppDelegate: NSObject, NSApplicationDelegate, ObservableObject {
 @main
 struct MacUMLApp: App {
     @NSApplicationDelegateAdaptor(AppDelegate.self) var appDelegate
+    @FocusedValue(\.renderer) private var renderer
 
     var body: some Scene {
         DocumentGroup(newDocument: MermaidDocument()) { file in
@@ -28,26 +29,30 @@ struct MacUMLApp: App {
             CheckForUpdatesCommand(updater: appDelegate.updaterController?.updater)
             CommandGroup(after: .textEditing) {
                 Button("Refresh Preview") {
-                    NotificationCenter.default.post(name: .refreshPreview, object: nil)
+                    renderer?.refreshCurrentSource()
                 }
                 .keyboardShortcut("r", modifiers: .command)
+                .disabled(renderer == nil)
             }
 
             CommandGroup(after: .toolbar) {
                 Button("Zoom In") {
-                    NotificationCenter.default.post(name: .zoomIn, object: nil)
+                    renderer?.zoomIn()
                 }
                 .keyboardShortcut("+", modifiers: .command)
+                .disabled(renderer == nil)
 
                 Button("Zoom Out") {
-                    NotificationCenter.default.post(name: .zoomOut, object: nil)
+                    renderer?.zoomOut()
                 }
                 .keyboardShortcut("-", modifiers: .command)
+                .disabled(renderer == nil)
 
                 Button("Actual Size") {
-                    NotificationCenter.default.post(name: .zoomReset, object: nil)
+                    renderer?.resetZoom()
                 }
                 .keyboardShortcut("0", modifiers: .command)
+                .disabled(renderer == nil)
             }
         }
         
@@ -100,9 +105,13 @@ struct AboutWindowContent: View {
     }
 }
 
-extension Notification.Name {
-    static let refreshPreview = Notification.Name("refreshPreview")
-    static let zoomIn = Notification.Name("zoomIn")
-    static let zoomOut = Notification.Name("zoomOut")
-    static let zoomReset = Notification.Name("zoomReset")
+struct FocusedRendererKey: FocusedValueKey {
+    typealias Value = MermaidRenderer
+}
+
+extension FocusedValues {
+    var renderer: MermaidRenderer? {
+        get { self[FocusedRendererKey.self] }
+        set { self[FocusedRendererKey.self] = newValue }
+    }
 }

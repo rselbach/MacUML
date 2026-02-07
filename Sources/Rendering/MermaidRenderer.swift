@@ -39,17 +39,13 @@ class MermaidRenderer: NSObject, ObservableObject {
 
         webView = DiagramWebView(frame: .zero, configuration: config)
 #if DEBUG
-        if #available(macOS 13.3, *) {
-            webView.isInspectable = true
-        }
+        webView.isInspectable = true
 #endif
         webView.underPageBackgroundColor = .clear
 
         super.init()
         
-        if let savedTheme = MermaidTheme(rawValue: AppSettings.shared.defaultDiagramTheme) {
-            theme = savedTheme
-        }
+        theme = AppSettings.shared.defaultDiagramTheme
 
         contentController.add(ReadyHandler(renderer: self), name: "ready")
         contentController.add(ZoomChangedHandler(renderer: self), name: "zoomChanged")
@@ -78,6 +74,10 @@ class MermaidRenderer: NSObject, ObservableObject {
         }
         
         logger.info("MermaidRenderer init complete")
+    }
+
+    func refreshCurrentSource() {
+        render(source: lastSource, force: true)
     }
 
     func render(source: String, force: Bool = false) {
@@ -184,10 +184,12 @@ class MermaidRenderer: NSObject, ObservableObject {
     }
 
     private func clearDiagram() {
-        let js = "document.getElementById('diagram').innerHTML = '';"
-        webView.evaluateJavaScript(js) { [weak self] _, error in
-            guard let self, let error else { return }
-            self.logger.error("Failed to clear preview DOM: \(error.localizedDescription, privacy: .public)")
+        Task {
+            do {
+                try await webView.evaluateJavaScript("document.getElementById('diagram').innerHTML = '';")
+            } catch {
+                logger.error("Failed to clear preview DOM: \(error.localizedDescription, privacy: .public)")
+            }
         }
     }
 
