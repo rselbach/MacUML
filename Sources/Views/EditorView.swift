@@ -7,6 +7,7 @@ final class CodeTextView: NSTextView {
     private var highlightWorkItem: DispatchWorkItem?
     private var pendingHighlightRange: NSRange?
     private var errorLine: Int?
+    private var errorHighlightRange: NSRange?
 
     override func didChangeText() {
         super.didChangeText()
@@ -49,11 +50,13 @@ final class CodeTextView: NSTextView {
     private func applyErrorHighlighting() {
         guard let storage = textStorage else { return }
         let text = storage.string as NSString
-        let fullRange = NSRange(location: 0, length: storage.length)
         
-        storage.removeAttribute(.underlineStyle, range: fullRange)
-        storage.removeAttribute(.underlineColor, range: fullRange)
-        storage.removeAttribute(.backgroundColor, range: fullRange)
+        if let previousRange = clampedRange(errorHighlightRange, maxLength: storage.length) {
+            storage.removeAttribute(.underlineStyle, range: previousRange)
+            storage.removeAttribute(.underlineColor, range: previousRange)
+            storage.removeAttribute(.backgroundColor, range: previousRange)
+        }
+        errorHighlightRange = nil
         
         guard let errorLine, errorLine > 0 else { return }
         
@@ -71,7 +74,17 @@ final class CodeTextView: NSTextView {
             storage.addAttribute(.backgroundColor, value: NSColor.systemRed.withAlphaComponent(0.2), range: lineRange)
             storage.addAttribute(.underlineStyle, value: NSUnderlineStyle.single.rawValue, range: lineRange)
             storage.addAttribute(.underlineColor, value: NSColor.systemRed, range: lineRange)
+            errorHighlightRange = lineRange
         }
+    }
+
+    private func clampedRange(_ range: NSRange?, maxLength: Int) -> NSRange? {
+        guard let range,
+              range.location != NSNotFound,
+              range.location < maxLength else {
+            return nil
+        }
+        return NSRange(location: range.location, length: min(range.length, maxLength - range.location))
     }
     
     override func keyDown(with event: NSEvent) {
