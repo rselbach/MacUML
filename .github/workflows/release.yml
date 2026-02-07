@@ -28,20 +28,26 @@ jobs:
 
       - name: Set version
         id: version
+        env:
+          EVENT_NAME: ${{ github.event_name }}
+          INPUT_VERSION: ${{ github.event.inputs.version }}
         run: |
-          if [[ "${{ github.event_name }}" == "push" ]]; then
+          if [[ "${EVENT_NAME}" == "push" ]]; then
             VERSION="${GITHUB_REF#refs/tags/v}"
-          elif [[ -n "${{ github.event.inputs.version }}" ]]; then
-            VERSION="${{ github.event.inputs.version }}"
+          elif [[ -n "${INPUT_VERSION}" ]]; then
+            VERSION="${INPUT_VERSION}"
           else
             VERSION="0.0.0-dev"
           fi
           echo "version=${VERSION}" >> "$GITHUB_OUTPUT"
 
       - name: Update version in Info.plist
+        env:
+          APP_VERSION: ${{ steps.version.outputs.version }}
+          BUILD_NUMBER: ${{ github.run_number }}
         run: |
-          /usr/libexec/PlistBuddy -c "Set :CFBundleShortVersionString ${{ steps.version.outputs.version }}" Sources/Info.plist
-          /usr/libexec/PlistBuddy -c "Set :CFBundleVersion ${{ github.run_number }}" Sources/Info.plist
+          /usr/libexec/PlistBuddy -c "Set :CFBundleShortVersionString ${APP_VERSION}" Sources/Info.plist
+          /usr/libexec/PlistBuddy -c "Set :CFBundleVersion ${BUILD_NUMBER}" Sources/Info.plist
 
       - name: Build release
         run: swift build -c release
@@ -164,28 +170,34 @@ jobs:
           xcrun stapler staple .build/dmg/MacUML.dmg
 
       - name: Rename DMG with version
+        env:
+          APP_VERSION: ${{ steps.version.outputs.version }}
         run: |
-          mv .build/dmg/MacUML.dmg ".build/dmg/MacUML-${{ steps.version.outputs.version }}.dmg"
+          mv .build/dmg/MacUML.dmg ".build/dmg/MacUML-${APP_VERSION}.dmg"
 
       - name: Sign DMG for Sparkle
         env:
           SPARKLE_EDDSA_PRIVATE_KEY: ${{ secrets.SPARKLE_EDDSA_PRIVATE_KEY }}
+          APP_VERSION: ${{ steps.version.outputs.version }}
         run: |
           SIGN_UPDATE=".build/artifacts/sparkle/Sparkle/bin/sign_update"
           chmod +x "${SIGN_UPDATE}"
-          
-          SIGNATURE=$("${SIGN_UPDATE}" ".build/dmg/MacUML-${{ steps.version.outputs.version }}.dmg" --ed-key-file <(echo -n "${SPARKLE_EDDSA_PRIVATE_KEY}"))
+
+          SIGNATURE=$("${SIGN_UPDATE}" ".build/dmg/MacUML-${APP_VERSION}.dmg" --ed-key-file <(echo -n "${SPARKLE_EDDSA_PRIVATE_KEY}"))
           echo "SPARKLE_SIGNATURE=${SIGNATURE}" >> "$GITHUB_ENV"
 
       - name: Generate appcast
+        env:
+          APP_VERSION: ${{ steps.version.outputs.version }}
+          BUILD_NUMBER: ${{ github.run_number }}
         run: |
-          VERSION="${{ steps.version.outputs.version }}"
+          VERSION="${APP_VERSION}"
           DMG_FILE=".build/dmg/MacUML-${VERSION}.dmg"
           DMG_SIZE=$(stat -f%z "${DMG_FILE}")
           PUB_DATE=$(date -u +"%a, %d %b %Y %H:%M:%S %z")
-          
+
           mkdir -p .build/pages
-          
+
           printf '<?xml version="1.0" encoding="utf-8"?>\n' > .build/pages/appcast.xml
           printf '<rss version="2.0" xmlns:sparkle="http://www.andymatuschak.org/xml-namespaces/sparkle">\n' >> .build/pages/appcast.xml
           printf '  <channel>\n' >> .build/pages/appcast.xml
@@ -196,13 +208,13 @@ jobs:
           printf '      <enclosure url="https://github.com/rselbach/MacUML/releases/download/v%s/MacUML-%s.dmg"\n' "${VERSION}" "${VERSION}" >> .build/pages/appcast.xml
           printf '                 %s\n' "${SPARKLE_SIGNATURE}" >> .build/pages/appcast.xml
           printf '                 type="application/octet-stream"/>\n' >> .build/pages/appcast.xml
-          printf '      <sparkle:version>%s</sparkle:version>\n' "${{ github.run_number }}" >> .build/pages/appcast.xml
+          printf '      <sparkle:version>%s</sparkle:version>\n' "${BUILD_NUMBER}" >> .build/pages/appcast.xml
           printf '      <sparkle:shortVersionString>%s</sparkle:shortVersionString>\n' "${VERSION}" >> .build/pages/appcast.xml
           printf '      <sparkle:minimumSystemVersion>15.0</sparkle:minimumSystemVersion>\n' >> .build/pages/appcast.xml
           printf '    </item>\n' >> .build/pages/appcast.xml
           printf '  </channel>\n' >> .build/pages/appcast.xml
           printf '</rss>\n' >> .build/pages/appcast.xml
-          
+
           cat .build/pages/appcast.xml
 
       - name: Upload DMG artifact

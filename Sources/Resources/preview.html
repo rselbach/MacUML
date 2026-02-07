@@ -1,0 +1,288 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'self' 'unsafe-inline' 'unsafe-eval'; style-src 'self' 'unsafe-inline'; img-src 'self' data:; font-src 'self';">
+    <script src="mermaid.min.js"></script>
+    <script>
+        window.currentTheme = 'auto';
+        window.renderSequence = 0;
+
+        function collectUnexpectedBodyNodes() {
+            const diagram = document.getElementById('diagram');
+            if (!diagram) return [];
+            return Array.from(document.body.childNodes).filter((node) => {
+                if (node === diagram) return false;
+                if (node instanceof Element &&
+                    node.getAttribute('data-macuml-role') === 'temp-render') {
+                    return false;
+                }
+                if (node.nodeType === Node.TEXT_NODE) {
+                    return (node.textContent || '').trim().length > 0;
+                }
+                return true;
+            });
+        }
+
+        function cleanupUnexpectedBodyNodes(reason) {
+            const unexpectedNodes = collectUnexpectedBodyNodes();
+            if (unexpectedNodes.length === 0) return;
+
+            console.warn('[MermaidPreview] Removing unexpected body nodes', {
+                reason,
+                count: unexpectedNodes.length
+            });
+            unexpectedNodes.forEach((node) => node.remove());
+        }
+
+        window.collectPreviewDiagnostics = function() {
+            const unexpectedNodes = collectUnexpectedBodyNodes();
+            return {
+                extraNodeCount: unexpectedNodes.length
+            };
+        };
+
+        function getEffectiveTheme() {
+            if (window.currentTheme === 'auto') {
+                return window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'default';
+            }
+            return window.currentTheme;
+        }
+
+        function initMermaid() {
+            mermaid.initialize({
+                startOnLoad: false,
+                theme: getEffectiveTheme(),
+                securityLevel: 'strict',
+                fontFamily: 'system-ui, -apple-system, sans-serif'
+            });
+        }
+
+        function updateBackground() {
+            const theme = getEffectiveTheme();
+            const container = document.getElementById('diagram');
+            const useDark = theme === 'dark' ||
+                (window.currentTheme === 'auto' && window.matchMedia('(prefers-color-scheme: dark)').matches);
+            container.className = useDark ? 'dark-bg' : 'light-bg';
+        }
+
+        document.addEventListener('DOMContentLoaded', () => {
+            initMermaid();
+            updateBackground();
+            cleanupUnexpectedBodyNodes('DOMContentLoaded');
+
+            const observer = new MutationObserver((mutations) => {
+                let hasUnexpectedMutation = false;
+                const diagram = document.getElementById('diagram');
+
+                for (const mutation of mutations) {
+                    for (const addedNode of mutation.addedNodes) {
+                        if (!diagram) continue;
+                        if (addedNode === diagram) continue;
+                        if (diagram.contains(addedNode)) continue;
+                        if (addedNode instanceof Element &&
+                            addedNode.getAttribute('data-macuml-role') === 'temp-render') {
+                            continue;
+                        }
+                        if (addedNode.nodeType === Node.TEXT_NODE &&
+                            (addedNode.textContent || '').trim().length === 0) {
+                            continue;
+                        }
+                        hasUnexpectedMutation = true;
+                        break;
+                    }
+                    if (hasUnexpectedMutation) break;
+                }
+
+                if (hasUnexpectedMutation) {
+                    cleanupUnexpectedBodyNodes('mutation-observer');
+                }
+            });
+            observer.observe(document.body, { childList: true });
+
+            window.webkit.messageHandlers.ready.postMessage(true);
+        });
+
+        window.matchMedia('(prefers-color-scheme: dark)').addEventListener('change', () => {
+            if (window.currentTheme === 'auto') {
+                initMermaid();
+                updateBackground();
+                if (window.lastSource) {
+                    window.renderDiagram(window.lastSource);
+                }
+            }
+        });
+
+        window.setTheme = function(theme) {
+            window.currentTheme = theme;
+            initMermaid();
+            updateBackground();
+        };
+
+        window.zoomLevel = 1.0;
+        const ZOOM_STEP = 0.1;
+        const ZOOM_MIN = 0.25;
+        const ZOOM_MAX = 5.0;
+
+        function applyZoom() {
+            const container = document.getElementById('diagram');
+            const inner = container.querySelector('.zoom-inner');
+            if (!inner) return;
+            inner.style.transform = 'scale(' + window.zoomLevel + ')';
+            inner.style.transformOrigin = 'center center';
+            if (window.webkit && window.webkit.messageHandlers.zoomChanged) {
+                window.webkit.messageHandlers.zoomChanged.postMessage(window.zoomLevel);
+            }
+        }
+
+        window.setZoom = function(level) {
+            window.zoomLevel = Math.min(ZOOM_MAX, Math.max(ZOOM_MIN, level));
+            applyZoom();
+            return window.zoomLevel;
+        };
+
+        window.zoomIn = function() {
+            return window.setZoom(Math.round((window.zoomLevel + ZOOM_STEP) * 100) / 100);
+        };
+
+        window.zoomOut = function() {
+            return window.setZoom(Math.round((window.zoomLevel - ZOOM_STEP) * 100) / 100);
+        };
+
+        window.resetZoom = function() {
+            return window.setZoom(1.0);
+        };
+
+        window.getZoom = function() {
+            return window.zoomLevel;
+        };
+
+        window.rescaleSVG = function() {
+            const container = document.getElementById('diagram');
+            const inner = container.querySelector('.zoom-inner');
+            const svgEl = inner ? inner.querySelector('svg') : container.querySelector('svg');
+            if (!svgEl) return;
+
+            svgEl.removeAttribute('style');
+            svgEl.style.maxWidth = '100%';
+            svgEl.style.maxHeight = '100%';
+            svgEl.style.width = 'auto';
+            svgEl.style.height = 'auto';
+        };
+
+        new ResizeObserver(() => window.rescaleSVG()).observe(document.documentElement);
+
+        window.renderDiagram = async function(source) {
+            window.lastSource = source;
+            const renderSequence = ++window.renderSequence;
+            const container = document.getElementById('diagram');
+            const tempContainer = document.createElement('div');
+            tempContainer.style.position = 'fixed';
+            tempContainer.style.left = '-10000px';
+            tempContainer.style.top = '0';
+            tempContainer.style.visibility = 'hidden';
+            tempContainer.style.pointerEvents = 'none';
+            tempContainer.setAttribute('data-macuml-role', 'temp-render');
+            tempContainer.setAttribute('aria-hidden', 'true');
+            document.body.appendChild(tempContainer);
+
+            try {
+                const id = 'mermaid-' + renderSequence + '-' + Date.now();
+                const { svg } = await mermaid.render(id, source, tempContainer);
+                if (renderSequence !== window.renderSequence) {
+                    return { success: true, stale: true };
+                }
+
+                const hasError = svg.includes('Syntax error') || svg.includes('Parse error');
+
+                if (svg && !hasError) {
+                    container.innerHTML = '<div class="zoom-inner">' + svg + '</div>';
+                    applyZoom();
+                    requestAnimationFrame(() => window.rescaleSVG());
+                    cleanupUnexpectedBodyNodes('render-success');
+                    return { success: true };
+                } else {
+                    const errorText = tempContainer.textContent || 'Syntax error in diagram';
+                    cleanupUnexpectedBodyNodes('render-error-content');
+                    return { success: false, error: errorText.trim().substring(0, 200) };
+                }
+            } catch (e) {
+                let line = null;
+                const msg = e.message || String(e);
+
+                const patterns = [
+                    /line\s*(\d+)/i,
+                    /on line (\d+)/i,
+                    /at line (\d+)/i,
+                    /:(\d+):/,
+                    /\((\d+):(\d+)\)/
+                ];
+
+                for (const pattern of patterns) {
+                    const match = msg.match(pattern);
+                    if (match) {
+                        line = parseInt(match[1], 10);
+                        break;
+                    }
+                }
+
+                return { success: false, error: msg, line: line };
+            } finally {
+                tempContainer.remove();
+                cleanupUnexpectedBodyNodes('render-finally');
+            }
+        };
+    </script>
+    <style>
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+        html, body {
+            height: 100%;
+        }
+        body {
+            font-family: system-ui, -apple-system, sans-serif;
+            background: transparent;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            padding: 0;
+        }
+        #diagram {
+            width: 100vw;
+            height: 100vh;
+            border-radius: 4px;
+            padding: 4px;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            overflow: auto;
+        }
+        .zoom-inner {
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            transform-origin: center center;
+            transition: transform 0.1s ease-out;
+        }
+        #diagram.light-bg {
+            background: white;
+        }
+        #diagram.dark-bg {
+            background: #1e1e1e;
+        }
+        #diagram svg {
+            max-width: 100%;
+            max-height: 100%;
+        }
+        .error {
+            color: #ff6b6b;
+            padding: 1em;
+            white-space: pre-wrap;
+            word-break: break-word;
+        }
+    </style>
+</head>
+<body>
+    <div id="diagram"></div>
+</body>
+</html>

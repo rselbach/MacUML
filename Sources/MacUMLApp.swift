@@ -6,9 +6,6 @@ class AppDelegate: NSObject, NSApplicationDelegate, ObservableObject {
     @Published var updaterController: SPUStandardUpdaterController?
     
     func applicationDidFinishLaunching(_ notification: Notification) {
-        NSApp.setActivationPolicy(.regular)
-        NSApp.activate(ignoringOtherApps: true)
-        
         updaterController = SPUStandardUpdaterController(
             startingUpdater: true,
             updaterDelegate: nil,
@@ -34,6 +31,23 @@ struct MacUMLApp: App {
                     NotificationCenter.default.post(name: .refreshPreview, object: nil)
                 }
                 .keyboardShortcut("r", modifiers: .command)
+            }
+
+            CommandGroup(after: .toolbar) {
+                Button("Zoom In") {
+                    NotificationCenter.default.post(name: .zoomIn, object: nil)
+                }
+                .keyboardShortcut("+", modifiers: .command)
+
+                Button("Zoom Out") {
+                    NotificationCenter.default.post(name: .zoomOut, object: nil)
+                }
+                .keyboardShortcut("-", modifiers: .command)
+
+                Button("Actual Size") {
+                    NotificationCenter.default.post(name: .zoomReset, object: nil)
+                }
+                .keyboardShortcut("0", modifiers: .command)
             }
         }
         
@@ -88,4 +102,7 @@ struct AboutWindowContent: View {
 
 extension Notification.Name {
     static let refreshPreview = Notification.Name("refreshPreview")
+    static let zoomIn = Notification.Name("zoomIn")
+    static let zoomOut = Notification.Name("zoomOut")
+    static let zoomReset = Notification.Name("zoomReset")
 }

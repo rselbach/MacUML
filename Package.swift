@@ -23,7 +23,8 @@ let package = Package(
             exclude: ["Info.plist", "Entitlements.plist"],
             resources: [
                 .copy("Resources/AppIcon.icns"),
-                .copy("Resources/mermaid.min.js")
+                .copy("Resources/mermaid.min.js"),
+                .copy("Resources/preview.html")
             ]
         ),
         .testTarget(

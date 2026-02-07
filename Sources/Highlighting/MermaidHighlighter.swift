@@ -45,7 +45,7 @@ final class MermaidHighlighter {
             ("\\{[^}]+\\}", nodeColor),
             ("\\(\\([^)]+\\)\\)", nodeColor),
             ("\\[\\[[^\\]]+\\]\\]", nodeColor),
-            ("%%\\{[^}]+\\}%%", directiveColor),
+            ("%%\\{.+\\}%%", directiveColor),
         ]
 
         for (pattern, color) in patternDefs {

@@ -5,30 +5,18 @@ final class CodeTextView: NSTextView {
     static let indentString = "    "
     private let highlighter = MermaidHighlighter.shared
     private var highlightWorkItem: DispatchWorkItem?
-    private var pendingHighlightRange: NSRange?
     private var errorLine: Int?
-    private var errorHighlightRange: NSRange?
 
     override func didChangeText() {
         super.didChangeText()
-        scheduleHighlighting(editedRange: textStorage?.editedRange)
+        scheduleHighlighting()
     }
 
-    private func scheduleHighlighting(editedRange: NSRange? = nil) {
-        if let editedRange,
-           editedRange.location != NSNotFound {
-            if let pendingRange = pendingHighlightRange {
-                pendingHighlightRange = NSUnionRange(pendingRange, editedRange)
-            } else {
-                pendingHighlightRange = editedRange
-            }
-        }
-
+    private func scheduleHighlighting() {
         highlightWorkItem?.cancel()
         let workItem = DispatchWorkItem { [weak self] in
             guard let self, let storage = self.textStorage else { return }
-            self.highlighter.highlight(storage, in: self.pendingHighlightRange)
-            self.pendingHighlightRange = nil
+            self.highlighter.highlight(storage)
             self.applyErrorHighlighting()
         }
         highlightWorkItem = workItem
@@ -50,13 +38,11 @@ final class CodeTextView: NSTextView {
     private func applyErrorHighlighting() {
         guard let storage = textStorage else { return }
         let text = storage.string as NSString
+        let fullRange = NSRange(location: 0, length: storage.length)
         
-        if let previousRange = clampedRange(errorHighlightRange, maxLength: storage.length) {
-            storage.removeAttribute(.underlineStyle, range: previousRange)
-            storage.removeAttribute(.underlineColor, range: previousRange)
-            storage.removeAttribute(.backgroundColor, range: previousRange)
-        }
-        errorHighlightRange = nil
+        storage.removeAttribute(.underlineStyle, range: fullRange)
+        storage.removeAttribute(.underlineColor, range: fullRange)
+        storage.removeAttribute(.backgroundColor, range: fullRange)
         
         guard let errorLine, errorLine > 0 else { return }
         
@@ -74,17 +60,7 @@ final class CodeTextView: NSTextView {
             storage.addAttribute(.backgroundColor, value: NSColor.systemRed.withAlphaComponent(0.2), range: lineRange)
             storage.addAttribute(.underlineStyle, value: NSUnderlineStyle.single.rawValue, range: lineRange)
             storage.addAttribute(.underlineColor, value: NSColor.systemRed, range: lineRange)
-            errorHighlightRange = lineRange
         }
-    }
-
-    private func clampedRange(_ range: NSRange?, maxLength: Int) -> NSRange? {
-        guard let range,
-              range.location != NSNotFound,
-              range.location < maxLength else {
-            return nil
-        }
-        return NSRange(location: range.location, length: min(range.length, maxLength - range.location))
     }
     
     override func keyDown(with event: NSEvent) {
