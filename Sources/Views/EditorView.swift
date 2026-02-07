@@ -5,18 +5,29 @@ final class CodeTextView: NSTextView {
     static let indentString = "    "
     private let highlighter = MermaidHighlighter.shared
     private var highlightWorkItem: DispatchWorkItem?
+    private var pendingHighlightRange: NSRange?
     private var errorLine: Int?
 
     override func didChangeText() {
         super.didChangeText()
-        scheduleHighlighting()
+        scheduleHighlighting(editedRange: textStorage?.editedRange)
     }
 
-    private func scheduleHighlighting() {
+    private func scheduleHighlighting(editedRange: NSRange? = nil) {
+        if let editedRange,
+           editedRange.location != NSNotFound {
+            if let pendingRange = pendingHighlightRange {
+                pendingHighlightRange = NSUnionRange(pendingRange, editedRange)
+            } else {
+                pendingHighlightRange = editedRange
+            }
+        }
+
         highlightWorkItem?.cancel()
         let workItem = DispatchWorkItem { [weak self] in
             guard let self, let storage = self.textStorage else { return }
-            self.highlighter.highlight(storage)
+            self.highlighter.highlight(storage, in: self.pendingHighlightRange)
+            self.pendingHighlightRange = nil
             self.applyErrorHighlighting()
         }
         highlightWorkItem = workItem

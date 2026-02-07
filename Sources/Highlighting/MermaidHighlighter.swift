@@ -59,21 +59,33 @@ final class MermaidHighlighter {
     func highlight(_ textStorage: NSTextStorage, in editedRange: NSRange? = nil) {
         let fullRange = NSRange(location: 0, length: textStorage.length)
         let text = textStorage.string
+        let nsText = text as NSString
+        let targetRange: NSRange
+
+        if let editedRange,
+           editedRange.location != NSNotFound,
+           editedRange.location <= textStorage.length {
+            let safeLength = min(editedRange.length, max(0, textStorage.length - editedRange.location))
+            let safeEditedRange = NSRange(location: editedRange.location, length: safeLength)
+            targetRange = nsText.lineRange(for: safeEditedRange)
+        } else {
+            targetRange = fullRange
+        }
 
         textStorage.beginEditing()
 
-        textStorage.removeAttribute(.foregroundColor, range: fullRange)
-        textStorage.addAttribute(.foregroundColor, value: NSColor.textColor, range: fullRange)
+        textStorage.removeAttribute(.foregroundColor, range: targetRange)
+        textStorage.addAttribute(.foregroundColor, value: NSColor.textColor, range: targetRange)
 
         for (regex, color) in patterns {
-            regex.enumerateMatches(in: text, options: [], range: fullRange) { match, _, _ in
+            regex.enumerateMatches(in: text, options: [], range: targetRange) { match, _, _ in
                 if let matchRange = match?.range {
                     textStorage.addAttribute(.foregroundColor, value: color, range: matchRange)
                 }
             }
         }
 
-        keywordPattern?.enumerateMatches(in: text, options: [], range: fullRange) { match, _, _ in
+        keywordPattern?.enumerateMatches(in: text, options: [], range: targetRange) { match, _, _ in
             if let matchRange = match?.range {
                 textStorage.addAttribute(.foregroundColor, value: keywordColor, range: matchRange)
             }
