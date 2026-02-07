@@ -12,8 +12,6 @@
     <true/>
     <key>com.apple.security.cs.allow-jit</key>
     <true/>
-    <key>com.apple.security.cs.allow-unsigned-executable-memory</key>
-    <true/>
     <key>com.apple.security.temporary-exception.mach-lookup.global-name</key>
     <array>
         <string>com.rselbach.MacUML-spks</string>

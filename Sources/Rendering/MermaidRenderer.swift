@@ -83,10 +83,19 @@ class MermaidRenderer: NSObject, ObservableObject {
     private let logger = Logger(subsystem: "com.macuml", category: "mermaid")
     private var mermaidReady = false
     private var pendingSource: String?
+    private let enablePreviewDiagnostics: Bool = {
+#if DEBUG
+        true
+#else
+        false
+#endif
+    }()
 
     override init() {
         let config = WKWebViewConfiguration()
+#if DEBUG
         config.preferences.setValue(true, forKey: "developerExtrasEnabled")
+#endif
         
         let contentController = WKUserContentController()
         config.userContentController = contentController
@@ -188,7 +197,7 @@ class MermaidRenderer: NSObject, ObservableObject {
                     state = .ready
                     currentError = nil
                 } else if let error = dict["error"] as? String {
-                    logger.info("Render failed: \(error)")
+                    logger.info("Render failed")
                     let line = dict["line"] as? Int
                     state = .failure(error)
                     currentError = MermaidError(message: error, line: line)
@@ -202,12 +211,16 @@ class MermaidRenderer: NSObject, ObservableObject {
                 state = .ready
             }
 
-            await auditPreviewDOM(context: "post-render")
+            if enablePreviewDiagnostics {
+                await auditPreviewDOM(context: "post-render")
+            }
         } catch {
             if !Task.isCancelled {
                 logger.error("Render failed: \(error.localizedDescription)")
                 state = .failure(error.localizedDescription)
-                await auditPreviewDOM(context: "render-error")
+                if enablePreviewDiagnostics {
+                    await auditPreviewDOM(context: "render-error")
+                }
             }
         }
     }
@@ -249,22 +262,6 @@ class MermaidRenderer: NSObject, ObservableObject {
                     window.currentTheme = 'auto';
                     window.renderSequence = 0;
 
-                    function summarizeNode(node) {
-                        const text = (node.textContent || '').trim().substring(0, 200);
-                        if (node.nodeType === Node.TEXT_NODE) {
-                            return { nodeType: 'text', text };
-                        }
-                        if (node instanceof Element) {
-                            return {
-                                nodeType: node.tagName.toLowerCase(),
-                                id: node.id || '',
-                                className: node.className || '',
-                                text
-                            };
-                        }
-                        return { nodeType: String(node.nodeType), text };
-                    }
-
                     function collectUnexpectedBodyNodes() {
                         const diagram = document.getElementById('diagram');
                         if (!diagram) return [];
@@ -285,16 +282,17 @@ class MermaidRenderer: NSObject, ObservableObject {
                         const unexpectedNodes = collectUnexpectedBodyNodes();
                         if (unexpectedNodes.length === 0) return;
 
-                        const details = unexpectedNodes.map((node) => summarizeNode(node));
-                        console.warn('[MermaidPreview] Removing unexpected body nodes', { reason, details });
+                        console.warn('[MermaidPreview] Removing unexpected body nodes', {
+                            reason,
+                            count: unexpectedNodes.length
+                        });
                         unexpectedNodes.forEach((node) => node.remove());
                     }
 
                     window.collectPreviewDiagnostics = function() {
                         const unexpectedNodes = collectUnexpectedBodyNodes();
                         return {
-                            extraNodeCount: unexpectedNodes.length,
-                            extras: unexpectedNodes.map((node) => summarizeNode(node))
+                            extraNodeCount: unexpectedNodes.length
                         };
                     };
                     
@@ -515,18 +513,11 @@ class MermaidRenderer: NSObject, ObservableObject {
                 return
             }
 
-            var details = "[]"
-            if let extras = result["extras"] as? [[String: Any]],
-               let data = try? JSONSerialization.data(withJSONObject: extras, options: []),
-               let text = String(data: data, encoding: .utf8) {
-                details = text
-            }
-
             logger.error(
-                "Preview DOM audit (\(context, privacy: .public)): extra nodes=\(extraNodeCount, privacy: .public), details=\(details, privacy: .public)"
+                "Preview DOM audit (\(context, privacy: .public)): extra nodes=\(extraNodeCount, privacy: .public)"
             )
         } catch {
-            logger.error("Preview DOM audit failed (\(context, privacy: .public)): \(error.localizedDescription, privacy: .public)")
+            logger.error("Preview DOM audit failed (\(context, privacy: .public))")
         }
     }
 
@@ -615,14 +606,30 @@ private class ReadyHandler: NSObject, WKScriptMessageHandler {
 }
 
 extension MermaidRenderer: WKNavigationDelegate {
-    nonisolated func webView(_ webView: WKWebView, didFinish navigation: WKNavigation!) {
+    func webView(
+        _ webView: WKWebView,
+        decidePolicyFor navigationAction: WKNavigationAction,
+        decisionHandler: @escaping @MainActor @Sendable (WKNavigationActionPolicy) -> Void
+    ) {
+        guard let requestURL = navigationAction.request.url else {
+            decisionHandler(.cancel)
+            return
+        }
+
+        if requestURL.isFileURL || requestURL.scheme == "about" {
+            decisionHandler(.allow)
+            return
+        }
+
+        decisionHandler(.cancel)
+    }
+
+    func webView(_ webView: WKWebView, didFinish navigation: WKNavigation!) {
         // Don't render here - wait for mermaid ready signal instead
     }
 
-    nonisolated func webView(_ webView: WKWebView, didFail navigation: WKNavigation!, withError error: Error) {
-        Task { @MainActor in
-            logger.error("Navigation failed: \(error.localizedDescription)")
-            state = .failure("Failed to load renderer")
-        }
+    func webView(_ webView: WKWebView, didFail navigation: WKNavigation!, withError error: Error) {
+        logger.error("Navigation failed: \(error.localizedDescription)")
+        state = .failure("Failed to load renderer")
     }
 }

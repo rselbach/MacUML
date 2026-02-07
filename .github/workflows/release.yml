@@ -198,7 +198,7 @@ jobs:
           printf '                 type="application/octet-stream"/>\n' >> .build/pages/appcast.xml
           printf '      <sparkle:version>%s</sparkle:version>\n' "${{ github.run_number }}" >> .build/pages/appcast.xml
           printf '      <sparkle:shortVersionString>%s</sparkle:shortVersionString>\n' "${VERSION}" >> .build/pages/appcast.xml
-          printf '      <sparkle:minimumSystemVersion>14.0</sparkle:minimumSystemVersion>\n' >> .build/pages/appcast.xml
+          printf '      <sparkle:minimumSystemVersion>15.0</sparkle:minimumSystemVersion>\n' >> .build/pages/appcast.xml
           printf '    </item>\n' >> .build/pages/appcast.xml
           printf '  </channel>\n' >> .build/pages/appcast.xml
           printf '</rss>\n' >> .build/pages/appcast.xml
