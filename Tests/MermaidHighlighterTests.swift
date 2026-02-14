@@ -13,9 +13,9 @@ struct MermaidHighlighterTests {
         return storage.attribute(.foregroundColor, at: index, effectiveRange: nil) as? NSColor
     }
 
-    private func makeStorage(_ text: String) -> NSTextStorage {
+    private func makeStorage(_ text: String) async -> NSTextStorage {
         let storage = NSTextStorage(string: text)
-        MermaidHighlighter.shared.highlight(storage)
+        await MermaidHighlighter.shared.highlight(storage)
         return storage
     }
 
@@ -27,8 +27,8 @@ struct MermaidHighlighterTests {
         ("subgraph cluster_A", 0, 7, "subgraph keyword"),
         ("end", 0, 2, "end keyword"),
     ])
-    func keywordHighlighting(text: String, start: Int, end: Int, label: String) {
-        let storage = makeStorage(text)
+    func keywordHighlighting(text: String, start: Int, end: Int, label: String) async {
+        let storage = await makeStorage(text)
         for i in start...end {
             let color = foregroundColor(in: storage, at: i)
             #expect(
@@ -39,8 +39,8 @@ struct MermaidHighlighterTests {
     }
 
     @Test("flowchart TD highlights both keywords purple")
-    func flowchartDirectionKeywords() {
-        let storage = makeStorage("flowchart TD")
+    func flowchartDirectionKeywords() async {
+        let storage = await makeStorage("flowchart TD")
         // "flowchart" at 0..8
         for i in 0...8 {
             #expect(foregroundColor(in: storage, at: i) == .systemPurple, "flowchart char \(i)")
@@ -56,9 +56,9 @@ struct MermaidHighlighterTests {
     // MARK: - Comments
 
     @Test("Line comments are highlighted green")
-    func commentHighlighting() {
+    func commentHighlighting() async {
         let text = "%% this is a comment"
-        let storage = makeStorage(text)
+        let storage = await makeStorage(text)
         for i in 0..<text.count {
             #expect(
                 foregroundColor(in: storage, at: i) == .systemGreen,
@@ -83,8 +83,8 @@ struct MermaidHighlighterTests {
     ]
 
     @Test("Strings are highlighted red", arguments: stringCases)
-    func stringHighlighting(tc: StringTestCase) {
-        let storage = makeStorage(tc.text)
+    func stringHighlighting(tc: StringTestCase) async {
+        let storage = await makeStorage(tc.text)
         for i in tc.start...tc.end {
             #expect(
                 foregroundColor(in: storage, at: i) == .systemRed,
@@ -110,8 +110,8 @@ struct MermaidHighlighterTests {
     ]
 
     @Test("Arrows are highlighted blue", arguments: arrowCases)
-    func arrowHighlighting(tc: ArrowTestCase) {
-        let storage = makeStorage(tc.text)
+    func arrowHighlighting(tc: ArrowTestCase) async {
+        let storage = await makeStorage(tc.text)
         for i in tc.arrowStart...tc.arrowEnd {
             #expect(
                 foregroundColor(in: storage, at: i) == .systemBlue,
@@ -136,8 +136,8 @@ struct MermaidHighlighterTests {
     ]
 
     @Test("Nodes are highlighted orange", arguments: nodeCases)
-    func nodeHighlighting(tc: NodeTestCase) {
-        let storage = makeStorage(tc.text)
+    func nodeHighlighting(tc: NodeTestCase) async {
+        let storage = await makeStorage(tc.text)
         for i in tc.nodeStart...tc.nodeEnd {
             #expect(
                 foregroundColor(in: storage, at: i) == .systemOrange,
@@ -149,9 +149,9 @@ struct MermaidHighlighterTests {
     // MARK: - Directives
 
     @Test("Directives are highlighted teal")
-    func directiveHighlighting() {
+    func directiveHighlighting() async {
         let text = "%%{init: {'theme':'forest'}}%%"
-        let storage = makeStorage(text)
+        let storage = await makeStorage(text)
         for i in 0..<text.count {
             #expect(
                 foregroundColor(in: storage, at: i) == .systemTeal,
@@ -163,12 +163,12 @@ struct MermaidHighlighterTests {
     // MARK: - Incremental highlighting
 
     @Test("Incremental highlight only affects edited range lines")
-    func incrementalHighlight() {
+    func incrementalHighlight() async {
         let text = "sequenceDiagram\nparticipant Alice\nparticipant Bob"
         let storage = NSTextStorage(string: text)
 
         // Full highlight first
-        MermaidHighlighter.shared.highlight(storage)
+        await MermaidHighlighter.shared.highlight(storage)
 
         // Verify line 1 "participant" is purple
         let line2Start = 16 // "participant" on second line
@@ -177,7 +177,7 @@ struct MermaidHighlighterTests {
         // Now do incremental highlight on line 3 only (range covering "participant Bob")
         let line3Start = 35 // "participant Bob" starts here
         let editRange = NSRange(location: line3Start, length: 15)
-        MermaidHighlighter.shared.highlight(storage, in: editRange)
+        await MermaidHighlighter.shared.highlight(storage, in: editRange)
 
         // Line 2 should still be purple (untouched by incremental)
         #expect(foregroundColor(in: storage, at: line2Start) == .systemPurple, "line 2 keyword after incremental")
@@ -189,15 +189,15 @@ struct MermaidHighlighterTests {
     // MARK: - Edge cases
 
     @Test("Empty string does not crash")
-    func emptyString() {
-        let storage = makeStorage("")
+    func emptyString() async {
+        let storage = await makeStorage("")
         #expect(storage.length == 0)
     }
 
     @Test("Plain text gets default text color")
-    func plainText() {
+    func plainText() async {
         let text = "just some plain text"
-        let storage = makeStorage(text)
+        let storage = await makeStorage(text)
         for i in 0..<text.count {
             #expect(
                 foregroundColor(in: storage, at: i) == .textColor,

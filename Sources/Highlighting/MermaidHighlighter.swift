@@ -43,9 +43,7 @@ final class MermaidHighlighter {
             ("\"[^\"\\n]*\"", stringColor),
             ("'[^'\\n]*'", stringColor),
             ("\\|[^|]+\\|", stringColor),
-            // Sequence diagram arrows and colon separator
             ("-->>|->>|--x|-x|--\\)|-\\)|:", arrowColor),
-            // Flowchart arrows
             ("-->|==>|-.->|==>>|-.->>|--o|<-->|<--|<.->", arrowColor),
             ("---|===|\\.\\.\\.", arrowColor),
             ("\\[[^\\]]+\\]", nodeColor),
@@ -67,7 +65,7 @@ final class MermaidHighlighter {
         return result
     }()
 
-    func highlight(_ textStorage: NSTextStorage, in editedRange: NSRange? = nil) {
+    func highlight(_ textStorage: NSTextStorage, in editedRange: NSRange? = nil) async {
         let fullRange = NSRange(location: 0, length: textStorage.length)
         let text = textStorage.string
         let nsText = text as NSString
@@ -83,25 +81,59 @@ final class MermaidHighlighter {
             targetRange = fullRange
         }
 
-        textStorage.beginEditing()
+        let patterns = self.patterns
+        let keywordPattern = self.keywordPattern
+        let keywordColor = self.keywordColor
 
+        let matches = await Task.detached {
+            Self.computeMatches(
+                text: text,
+                range: targetRange,
+                patterns: patterns,
+                keywordPattern: keywordPattern,
+                keywordColor: keywordColor
+            )
+        }.value
+
+        textStorage.beginEditing()
         textStorage.removeAttribute(.foregroundColor, range: targetRange)
         textStorage.addAttribute(.foregroundColor, value: NSColor.textColor, range: targetRange)
 
-        for (regex, color) in patterns {
-            regex.enumerateMatches(in: text, options: [], range: targetRange) { match, _, _ in
-                if let matchRange = match?.range {
-                    textStorage.addAttribute(.foregroundColor, value: color, range: matchRange)
-                }
-            }
-        }
-
-        keywordPattern?.enumerateMatches(in: text, options: [], range: targetRange) { match, _, _ in
-            if let matchRange = match?.range {
-                textStorage.addAttribute(.foregroundColor, value: keywordColor, range: matchRange)
-            }
+        for match in matches {
+            textStorage.addAttribute(.foregroundColor, value: match.color, range: match.range)
         }
 
         textStorage.endEditing()
     }
+
+    private nonisolated static func computeMatches(
+        text: String,
+        range: NSRange,
+        patterns: [(NSRegularExpression, NSColor)],
+        keywordPattern: NSRegularExpression?,
+        keywordColor: NSColor
+    ) -> [HighlightMatch] {
+        var matches: [HighlightMatch] = []
+
+        for (regex, color) in patterns {
+            regex.enumerateMatches(in: text, options: [], range: range) { match, _, _ in
+                if let matchRange = match?.range {
+                    matches.append(HighlightMatch(range: matchRange, color: color))
+                }
+            }
+        }
+
+        keywordPattern?.enumerateMatches(in: text, options: [], range: range) { match, _, _ in
+            if let matchRange = match?.range {
+                matches.append(HighlightMatch(range: matchRange, color: keywordColor))
+            }
+        }
+
+        return matches
+    }
+}
+
+private struct HighlightMatch {
+    let range: NSRange
+    let color: NSColor
 }
