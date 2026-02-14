@@ -1,33 +1,6 @@
 import Foundation
 import WebKit
-
-extension MermaidRenderer {
-    nonisolated static func normalizedFileURL(_ url: URL) -> URL {
-        url.standardizedFileURL.resolvingSymlinksInPath()
-    }
-
-    nonisolated static func navigationPolicy(for requestURL: URL?, trustedLocalFiles: Set<URL>) -> WKNavigationActionPolicy {
-        guard let requestURL else {
-            return .cancel
-        }
-
-        if requestURL.scheme == "about" {
-            let aboutURL = requestURL.absoluteString.lowercased()
-            return (aboutURL == "about:blank" || aboutURL == "about:srcdoc") ? .allow : .cancel
-        }
-
-        guard requestURL.isFileURL else {
-            return .cancel
-        }
-
-        let normalizedRequestURL = normalizedFileURL(requestURL)
-        return trustedLocalFiles.contains(normalizedRequestURL) ? .allow : .cancel
-    }
-
-    nonisolated static func navigationPolicy(for requestURL: URL?) -> WKNavigationActionPolicy {
-        navigationPolicy(for: requestURL, trustedLocalFiles: [])
-    }
-}
+import os
 
 extension MermaidRenderer: WKNavigationDelegate {
     func webView(
@@ -35,7 +8,10 @@ extension MermaidRenderer: WKNavigationDelegate {
         decidePolicyFor navigationAction: WKNavigationAction,
         decisionHandler: @escaping @MainActor @Sendable (WKNavigationActionPolicy) -> Void
     ) {
-        decisionHandler(Self.navigationPolicy(for: navigationAction.request.url, trustedLocalFiles: validator.trustedPreviewFiles))
+decisionHandler(DiagramSecurityPolicy.navigationPolicy(
+            for: navigationAction.request.url,
+            trustedLocalFiles: validator.trustedPreviewFiles
+        ))
     }
 
     nonisolated func webView(_ webView: WKWebView, didFinish navigation: WKNavigation!) {
