@@ -4,7 +4,7 @@ import WebKit
 
 @Suite("Mermaid Renderer Security Tests")
 struct MermaidRendererSecurityTests {
-    private let trustedPreviewURL = MermaidRenderer.normalizedFileURL(
+    private let trustedPreviewURL = DiagramSecurityPolicy.normalizedFileURL(
         URL(fileURLWithPath: "/tmp/preview.html")
     )
 
@@ -14,7 +14,7 @@ struct MermaidRendererSecurityTests {
 
     @Test("Allows trusted local preview file URL")
     func allowsTrustedFileURL() {
-        let policy = MermaidRenderer.navigationPolicy(
+        let policy = DiagramSecurityPolicy.navigationPolicy(
             for: trustedPreviewURL,
             trustedLocalFiles: trustedLocalFiles
         )
@@ -23,7 +23,7 @@ struct MermaidRendererSecurityTests {
 
     @Test("Allows normalized trusted local preview file URL")
     func allowsNormalizedTrustedFileURL() {
-        let policy = MermaidRenderer.navigationPolicy(
+        let policy = DiagramSecurityPolicy.navigationPolicy(
             for: URL(fileURLWithPath: "/tmp/./preview.html"),
             trustedLocalFiles: trustedLocalFiles
         )
@@ -32,7 +32,7 @@ struct MermaidRendererSecurityTests {
 
     @Test("Blocks untrusted local file URL")
     func blocksUntrustedFileURL() {
-        let policy = MermaidRenderer.navigationPolicy(
+        let policy = DiagramSecurityPolicy.navigationPolicy(
             for: URL(fileURLWithPath: "/tmp/not-trusted.mmd"),
             trustedLocalFiles: trustedLocalFiles
         )
@@ -41,7 +41,7 @@ struct MermaidRendererSecurityTests {
 
     @Test("Allows about:blank")
     func allowsAboutBlank() {
-        let policy = MermaidRenderer.navigationPolicy(
+        let policy = DiagramSecurityPolicy.navigationPolicy(
             for: URL(string: "about:blank"),
             trustedLocalFiles: trustedLocalFiles
         )
@@ -50,7 +50,7 @@ struct MermaidRendererSecurityTests {
 
     @Test("Blocks non-blank about URLs")
     func blocksNonBlankAboutURL() {
-        let policy = MermaidRenderer.navigationPolicy(
+        let policy = DiagramSecurityPolicy.navigationPolicy(
             for: URL(string: "about:config"),
             trustedLocalFiles: trustedLocalFiles
         )
@@ -59,7 +59,7 @@ struct MermaidRendererSecurityTests {
 
     @Test("Blocks remote HTTPS URLs")
     func blocksRemoteURL() {
-        let policy = MermaidRenderer.navigationPolicy(
+        let policy = DiagramSecurityPolicy.navigationPolicy(
             for: URL(string: "https://example.com"),
             trustedLocalFiles: trustedLocalFiles
         )
@@ -68,7 +68,7 @@ struct MermaidRendererSecurityTests {
 
     @Test("Blocks remote HTTP URLs")
     func blocksRemoteHTTPURL() {
-        let policy = MermaidRenderer.navigationPolicy(
+        let policy = DiagramSecurityPolicy.navigationPolicy(
             for: URL(string: "http://example.com"),
             trustedLocalFiles: trustedLocalFiles
         )
@@ -77,7 +77,7 @@ struct MermaidRendererSecurityTests {
 
     @Test("Blocks javascript URLs")
     func blocksJavaScriptURL() {
-        let policy = MermaidRenderer.navigationPolicy(
+        let policy = DiagramSecurityPolicy.navigationPolicy(
             for: URL(string: "javascript:alert('nope')"),
             trustedLocalFiles: trustedLocalFiles
         )
@@ -86,7 +86,7 @@ struct MermaidRendererSecurityTests {
 
     @Test("Blocks data URLs")
     func blocksDataURL() {
-        let policy = MermaidRenderer.navigationPolicy(
+        let policy = DiagramSecurityPolicy.navigationPolicy(
             for: URL(string: "data:text/plain,hello"),
             trustedLocalFiles: trustedLocalFiles
         )
@@ -95,7 +95,7 @@ struct MermaidRendererSecurityTests {
 
     @Test("Blocks nil URLs")
     func blocksNilURL() {
-        let policy = MermaidRenderer.navigationPolicy(
+        let policy = DiagramSecurityPolicy.navigationPolicy(
             for: nil,
             trustedLocalFiles: trustedLocalFiles
         )
