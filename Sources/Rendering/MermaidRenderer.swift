@@ -72,17 +72,19 @@ class MermaidRenderer: NSObject, ObservableObject {
         webView.copyPNGHandler = { [weak self] in
             guard let self else { return }
             Task { @MainActor in
-                guard let pngData = await self.copyAsPNG() else { return }
+                let exporter = DiagramExporter(webView: self.webView)
+                guard let pngData = await exporter.copyAsPNG() else { return }
                 let pasteboard = NSPasteboard.general
                 pasteboard.clearContents()
                 pasteboard.setData(pngData, forType: .png)
             }
         }
-        
+
         webView.copySVGHandler = { [weak self] in
             guard let self else { return }
             Task { @MainActor in
-                guard let svg = await self.copySVG() else { return }
+                let exporter = DiagramExporter(webView: self.webView)
+                guard let svg = await exporter.copySVG() else { return }
                 let pasteboard = NSPasteboard.general
                 pasteboard.clearContents()
                 pasteboard.setString(svg, forType: .string)

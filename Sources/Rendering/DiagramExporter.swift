@@ -1,14 +1,18 @@
-import Foundation
-import WebKit
 import AppKit
+import Foundation
+import os
+import WebKit
 
-extension MermaidRenderer {
-    func copyAsPNG() async -> Data? {
+@MainActor
+struct DiagramExporter {
+    let webView: DiagramWebView
+    private let logger = Logger(subsystem: "com.macuml", category: "exporter")
+
+    func copyAsPNG(padding: CGFloat = 16) async -> Data? {
         let config = WKSnapshotConfiguration()
         config.afterScreenUpdates = true
 
         if let rect = await getDiagramBounds() {
-            let padding: CGFloat = 16
             let paddedRect = CGRect(
                 x: max(0, rect.origin.x - padding),
                 y: max(0, rect.origin.y - padding),
@@ -33,7 +37,23 @@ extension MermaidRenderer {
         }
     }
 
-    internal func getDiagramBounds() async -> CGRect? {
+    func copySVG() async -> String? {
+        let js = """
+            (function() {
+                const svg = document.querySelector('#diagram svg');
+                return svg ? svg.outerHTML : '';
+            })()
+            """
+        do {
+            let result = try await webView.evaluateJavaScript(js)
+            return result as? String
+        } catch {
+            logger.error("SVG extraction failed: \(error.localizedDescription)")
+            return nil
+        }
+    }
+
+    private func getDiagramBounds() async -> CGRect? {
         let js = """
             (function() {
                 const svg = document.querySelector('#diagram svg');
@@ -53,22 +73,6 @@ extension MermaidRenderer {
             return CGRect(x: x, y: y, width: width, height: height)
         } catch {
             logger.error("Failed to get diagram bounds: \(error.localizedDescription)")
-            return nil
-        }
-    }
-
-    func copySVG() async -> String? {
-        let js = """
-            (function() {
-                const svg = document.querySelector('#diagram svg');
-                return svg ? svg.outerHTML : '';
-            })()
-            """
-        do {
-            let result = try await webView.evaluateJavaScript(js)
-            return result as? String
-        } catch {
-            logger.error("SVG extraction failed: \(error.localizedDescription)")
             return nil
         }
     }
