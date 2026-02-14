@@ -1,6 +1,17 @@
 import SwiftUI
 import AppKit
 
+private enum Constants {
+    static let editorMinWidth: CGFloat = 300
+    static let previewMinWidth: CGFloat = 300
+    static let windowMinWidth: CGFloat = 700
+    static let windowMinHeight: CGFloat = 500
+    static let errorBarSpacing: CGFloat = 6
+    static let errorBarHorizontalPadding: CGFloat = 8
+    static let errorBarVerticalPadding: CGFloat = 4
+    static let errorBarBackgroundOpacity: Double = 0.85
+}
+
 struct DocumentView: View {
     @Binding var document: MermaidDocument
     @StateObject private var renderer = MermaidRenderer()
@@ -14,12 +25,12 @@ struct DocumentView: View {
                     errorBar(error: error)
                 }
             }
-            .frame(minWidth: 300)
+            .frame(minWidth: Constants.editorMinWidth)
 
             PreviewPane(renderer: renderer)
-                .frame(minWidth: 300)
+                .frame(minWidth: Constants.previewMinWidth)
         }
-        .frame(minWidth: 700, minHeight: 500)
+        .frame(minWidth: Constants.windowMinWidth, minHeight: Constants.windowMinHeight)
         .focusedValue(\.renderer, renderer)
         .onChange(of: document.text) { _, newValue in
             renderer.render(source: newValue)
@@ -30,7 +41,7 @@ struct DocumentView: View {
     }
     
     private func errorBar(error: MermaidError) -> some View {
-        HStack(spacing: 6) {
+        HStack(spacing: Constants.errorBarSpacing) {
             Image(systemName: "exclamationmark.triangle.fill")
                 .foregroundStyle(.white)
             
@@ -62,9 +73,9 @@ struct DocumentView: View {
         }
         .font(.caption)
         .foregroundStyle(.white)
-        .padding(.horizontal, 8)
-        .padding(.vertical, 4)
-        .background(Color.red.opacity(0.85))
+        .padding(.horizontal, Constants.errorBarHorizontalPadding)
+        .padding(.vertical, Constants.errorBarVerticalPadding)
+        .background(Color.red.opacity(Constants.errorBarBackgroundOpacity))
         .accessibilityElement(children: .combine)
         .accessibilityLabel("Diagram Error")
     }

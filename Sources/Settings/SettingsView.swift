@@ -1,5 +1,12 @@
 import SwiftUI
 
+private enum Constants {
+    static let fontSizeRange: ClosedRange<Double> = 9...24
+    static let fontSizeLabelWidth: CGFloat = 45
+    static let windowWidth: CGFloat = 400
+    static let windowHeight: CGFloat = 300
+}
+
 struct SettingsView: View {
     @StateObject private var settings = AppSettings.shared
     
@@ -17,10 +24,10 @@ struct SettingsView: View {
                 
                 HStack {
                     Text("Font Size:")
-                    Slider(value: $settings.editorFontSize, in: 9...24, step: 1)
+                    Slider(value: $settings.editorFontSize, in: Constants.fontSizeRange, step: 1)
                     Text("\(Int(settings.editorFontSize)) pt")
                         .monospacedDigit()
-                        .frame(width: 45, alignment: .trailing)
+                        .frame(width: Constants.fontSizeLabelWidth, alignment: .trailing)
                 }
                 
                 Toggle("Show Line Numbers", isOn: $settings.showLineNumbers)
@@ -36,7 +43,7 @@ struct SettingsView: View {
             }
         }
         .formStyle(.grouped)
-        .frame(width: 400, height: 300)
+        .frame(width: Constants.windowWidth, height: Constants.windowHeight)
     }
 }
 
