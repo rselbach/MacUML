@@ -29,17 +29,12 @@ extension MermaidRenderer {
     }
 
     internal func applyZoom(level: Double) async {
-        let js = "window.setZoom(\(level));"
         do {
-            let result = try await webView.evaluateJavaScript(js)
-            if let zoom = result as? Double {
-                zoomLevel = zoom
-                return
-            }
-
-            if let zoom = result as? NSNumber {
-                zoomLevel = zoom.doubleValue
-            }
+            _ = try await webView.callAsyncJavaScript(
+                "window.setZoom(level);",
+                arguments: ["level": level],
+                contentWorld: .page
+            )
         } catch {
             logger.error("Failed to set zoom to \(level, privacy: .public): \(error.localizedDescription, privacy: .public)")
         }
