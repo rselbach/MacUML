@@ -37,22 +37,6 @@ struct MermaidDocument: FileDocument {
         return .init(regularFileWithContents: data)
     }
 
-    init(fileWrapper: FileWrapper) throws {
-        guard let data = fileWrapper.regularFileContents,
-              let string = String(data: data, encoding: .utf8)
-        else {
-            throw CocoaError(.fileReadCorruptFile)
-        }
-        text = string
-    }
-
-    func toFileWrapper() throws -> FileWrapper {
-        guard let data = text.data(using: .utf8) else {
-            throw CocoaError(.fileWriteInapplicableStringEncoding)
-        }
-        return FileWrapper(regularFileWithContents: data)
-    }
-
     private static let defaultContent = """
 sequenceDiagram
     participant Jeff

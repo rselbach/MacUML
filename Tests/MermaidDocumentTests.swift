@@ -29,13 +29,15 @@ struct MermaidDocumentTests {
     @Test("Round-trip preserves custom text")
     func roundTripPreservesText() throws {
         let mermaid = "flowchart TD\n  TroyBarnes-->AbedNadir\n  AbedNadir-->GreendaleCommunityCollege"
-        let restored = try MermaidDocument(fileWrapper: MermaidDocument(text: mermaid).toFileWrapper())
+        let wrapper = try MermaidDocument(text: mermaid).testFileWrapper()
+        let restored = try MermaidDocument(testFileWrapper: wrapper)
         #expect(restored.text == mermaid)
     }
 
     @Test("Round-trip preserves empty string")
     func roundTripEmptyString() throws {
-        let restored = try MermaidDocument(fileWrapper: MermaidDocument(text: "").toFileWrapper())
+        let wrapper = try MermaidDocument(text: "").testFileWrapper()
+        let restored = try MermaidDocument(testFileWrapper: wrapper)
         #expect(restored.text == "")
     }
 
@@ -44,7 +46,25 @@ struct MermaidDocumentTests {
         let invalidUTF8 = Data([0xC0, 0xAF, 0xFE, 0xFF])
         let wrapper = FileWrapper(regularFileWithContents: invalidUTF8)
         #expect(throws: CocoaError(.fileReadCorruptFile)) {
-            try MermaidDocument(fileWrapper: wrapper)
+            try MermaidDocument(testFileWrapper: wrapper)
         }
+    }
+}
+
+extension MermaidDocument {
+    init(testFileWrapper: FileWrapper) throws {
+        guard let data = testFileWrapper.regularFileContents,
+              let string = String(data: data, encoding: .utf8)
+        else {
+            throw CocoaError(.fileReadCorruptFile)
+        }
+        self.init(text: string)
+    }
+
+    func testFileWrapper() throws -> FileWrapper {
+        guard let data = text.data(using: .utf8) else {
+            throw CocoaError(.fileWriteInapplicableStringEncoding)
+        }
+        return FileWrapper(regularFileWithContents: data)
     }
 }
