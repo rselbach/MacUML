@@ -7,7 +7,7 @@
 
 A native macOS editor for [Mermaid](https://mermaid.js.org/) diagrams with live preview.
 
-![MacUML Screenshot](https://github.com/rselbach/MacUML/assets/placeholder.png)
+![MacUML Screenshot](https://github.com/rselbach/MacUML/blob/main/assets/MacUML.png)
 
 ## Features
 

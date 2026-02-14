@@ -2,6 +2,9 @@ import Foundation
 import WebKit
 
 extension MermaidRenderer {
+    private enum Constants {
+        static let zoomEpsilon: Double = 0.0001
+    }
     func zoomIn() {
         setZoom(zoomLevel + zoomStep)
     }
@@ -55,7 +58,7 @@ extension MermaidRenderer {
         }
 
         let normalized = (clampZoom(rawLevel) * 100).rounded() / 100
-        guard abs(normalized - zoomLevel) >= 0.0001 else {
+        guard abs(normalized - zoomLevel) >= Constants.zoomEpsilon else {
             return
         }
 

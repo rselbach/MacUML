@@ -1,6 +1,5 @@
 import Foundation
 import WebKit
-import os
 
 extension MermaidRenderer: WKNavigationDelegate {
     func webView(

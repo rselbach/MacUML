@@ -41,7 +41,8 @@ enum MermaidTheme: String, CaseIterable {
     case neutral = "neutral"
     /// Base theme for custom styling.
     case base = "base"
-    
+
+    /// Human-readable display label for UI presentation.
     var label: String {
         switch self {
         case .auto: return "Auto"
