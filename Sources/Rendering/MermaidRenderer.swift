@@ -3,6 +3,20 @@ import WebKit
 import os
 import AppKit
 
+/// Renders Mermaid diagrams in a WebView.
+///
+/// Manages the lifecycle of a WebView that renders Mermaid.js diagrams with:
+/// - Debounced rendering to avoid excessive re-renders during typing
+/// - Theme switching (auto, default, dark, forest, neutral, base)
+/// - Zoom controls with keyboard shortcuts
+/// - Error propagation with optional line information
+/// - Export to PNG/SVG via clipboard
+///
+/// Usage:
+/// ```swift
+/// let renderer = MermaidRenderer()
+/// renderer.render(source: "flowchart TD\nA-->B")
+/// ```
 @MainActor
 class MermaidRenderer: NSObject, ObservableObject {
     @Published var state: MermaidRenderState = .idle
