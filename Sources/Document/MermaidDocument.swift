@@ -11,6 +11,10 @@ extension UTType {
     }
 }
 
+/// A document representing a Mermaid diagram source file.
+///
+/// Supports reading and writing `.mmd` and `.mermaid` files with UTF-8 encoding.
+/// New documents start with a sample sequence diagram demonstrating basic syntax.
 struct MermaidDocument: FileDocument {
     var text: String
 

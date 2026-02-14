@@ -1,6 +1,14 @@
 import SwiftUI
 import AppKit
 
+/// Global application settings persisted via UserDefaults.
+///
+/// Settings include:
+/// - Editor font family and size
+/// - Line number visibility toggle
+/// - Default diagram theme for new documents
+///
+/// Access via `AppSettings.shared`. Changes are automatically persisted.
 @MainActor
 final class AppSettings: ObservableObject {
     static let shared = AppSettings()
