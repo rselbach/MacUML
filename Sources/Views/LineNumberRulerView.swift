@@ -1,14 +1,21 @@
 import AppKit
+import Combine
+
+private enum Constants {
+    static let defaultFontSize: CGFloat = 11
+    static let minimumThickness: CGFloat = 36
+    static let horizontalPadding: CGFloat = 8
+    static let fontSizeRatio: CGFloat = 0.85
+    static let minimumFontSize: CGFloat = 10
+}
 
 final class LineNumberRulerView: NSRulerView {
     private weak var textView: NSTextView?
+    private var cancellables = Set<AnyCancellable>()
     private var lineNumberAttributes: [NSAttributedString.Key: Any] = [
-        .font: NSFont.monospacedDigitSystemFont(ofSize: 11, weight: .regular),
+        .font: NSFont.monospacedDigitSystemFont(ofSize: Constants.defaultFontSize, weight: .regular),
         .foregroundColor: NSColor.secondaryLabelColor
     ]
-
-    private let minThickness: CGFloat = 36
-    private let horizontalPadding: CGFloat = 8
     private var cachedLineCount = 1
     private var lineStartOffsets: [Int] = [0]
 
@@ -29,12 +36,8 @@ final class LineNumberRulerView: NSRulerView {
         fatalError("init(coder:) has not been implemented")
     }
 
-    deinit {
-        NotificationCenter.default.removeObserver(self)
-    }
-
     func refresh(using editorFont: NSFont) {
-        let newFont = NSFont.monospacedDigitSystemFont(ofSize: max(10, editorFont.pointSize * 0.85), weight: .regular)
+        let newFont = NSFont.monospacedDigitSystemFont(ofSize: max(Constants.minimumFontSize, editorFont.pointSize * Constants.fontSizeRatio), weight: .regular)
         let oldFont = lineNumberAttributes[.font] as? NSFont
         guard oldFont?.pointSize != newFont.pointSize else {
             return
@@ -117,41 +120,28 @@ final class LineNumberRulerView: NSRulerView {
 
         if let contentView = scrollView?.contentView {
             contentView.postsBoundsChangedNotifications = true
-            NotificationCenter.default.addObserver(
-                self,
-                selector: #selector(handleBoundsChanged(_:)),
-                name: NSView.boundsDidChangeNotification,
-                object: contentView
-            )
+            NotificationCenter.default.publisher(for: NSView.boundsDidChangeNotification, object: contentView)
+                .receive(on: DispatchQueue.main)
+                .sink { [weak self] _ in self?.needsDisplay = true }
+                .store(in: &cancellables)
         }
 
-        NotificationCenter.default.addObserver(
-            self,
-            selector: #selector(handleTextChanged(_:)),
-            name: NSText.didChangeNotification,
-            object: textView
-        )
-    }
-
-    @objc
-    private func handleBoundsChanged(_ notification: Notification) {
-        needsDisplay = true
-    }
-
-    @objc
-    private func handleTextChanged(_ notification: Notification) {
-        if let textView = notification.object as? NSTextView {
-            rebuildLineMetadata(using: textView.string)
-            recalculateThickness()
-        }
-        needsDisplay = true
+        NotificationCenter.default.publisher(for: NSText.didChangeNotification, object: textView)
+            .receive(on: DispatchQueue.main)
+            .sink { [weak self] notification in
+                guard let self, let textView = notification.object as? NSTextView else { return }
+                self.rebuildLineMetadata(using: textView.string)
+                self.recalculateThickness()
+                self.needsDisplay = true
+            }
+            .store(in: &cancellables)
     }
 
     private func recalculateThickness() {
         let digits = String(max(1, cachedLineCount)).count
         let sample = String(repeating: "8", count: digits) as NSString
         let labelWidth = sample.size(withAttributes: lineNumberAttributes).width
-        let targetThickness = max(minThickness, ceil(labelWidth + (horizontalPadding * 2)))
+        let targetThickness = max(Constants.minimumThickness, ceil(labelWidth + (Constants.horizontalPadding * 2)))
 
         if abs(ruleThickness - targetThickness) > .ulpOfOne {
             ruleThickness = targetThickness
@@ -182,6 +172,11 @@ final class LineNumberRulerView: NSRulerView {
     }
 
     private func rebuildLineMetadata(using text: String) {
+        // Trade-off: O(n) full rebuild on every text change.
+        // CodeTextView.applyLineDelta() handles incremental cachedLineCount updates,
+        // but lineStartOffsets is needed for binary search lookups in lineNumber(for:layoutManager:).
+        // Incremental offset updates would require tracking edit location and shifting all subsequent offsets,
+        // which adds complexity for typically small documents. Consider optimizing if profiling shows issues.
         lineStartOffsets = [0]
         if text.isEmpty {
             cachedLineCount = 1
@@ -206,7 +201,7 @@ final class LineNumberRulerView: NSRulerView {
     private func draw(lineNumber: Int, atY y: CGFloat) {
         let label = "\(lineNumber)" as NSString
         let size = label.size(withAttributes: lineNumberAttributes)
-        let x = ruleThickness - horizontalPadding - size.width
+        let x = ruleThickness - Constants.horizontalPadding - size.width
         label.draw(at: NSPoint(x: x, y: y + 1), withAttributes: lineNumberAttributes)
     }
 }
