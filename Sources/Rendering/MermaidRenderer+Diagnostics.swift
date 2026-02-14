@@ -27,10 +27,13 @@ extension MermaidRenderer {
             """
 
         var lastFlags: (hasMermaid: Bool, hasRenderDiagram: Bool, hasSetTheme: Bool, hasSetZoom: Bool)?
-        for _ in 0..<20 {
+        var delay = validationInitialDelay
+
+        for _ in 0..<validationMaxAttempts {
             do {
                 guard let result = try await webView.evaluateJavaScript(js) as? [String: Any] else {
-                    try await Task.sleep(for: .milliseconds(100))
+                    try await Task.sleep(for: delay)
+                    delay = min(delay * 2, validationMaxDelay)
                     continue
                 }
 
@@ -52,7 +55,8 @@ extension MermaidRenderer {
             }
 
             do {
-                try await Task.sleep(for: .milliseconds(100))
+                try await Task.sleep(for: delay)
+                delay = min(delay * 2, validationMaxDelay)
             } catch {
                 return
             }
