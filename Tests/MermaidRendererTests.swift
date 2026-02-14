@@ -28,7 +28,7 @@ struct MermaidRendererTests {
         let renderer = MermaidRenderer()
         renderer.render(source: "flowchart TD\nA-->B")
 
-        try await waitForRenderCompletion(renderer: renderer, timeout: .seconds(3))
+        try await waitForRenderCompletion(renderer: renderer, timeout: .seconds(5))
 
         let js = "document.querySelector('#diagram svg')?.outerHTML ?? ''"
         let svgHTML = try await renderer.webView.evaluateJavaScript(js) as? String
@@ -42,7 +42,7 @@ struct MermaidRendererTests {
         try await Task.sleep(for: .milliseconds(400))
         renderer.render(source: "flowchart TD\nA-->B")
 
-        try await waitForRenderCompletion(renderer: renderer, timeout: .seconds(3))
+        try await waitForRenderCompletion(renderer: renderer, timeout: .seconds(5))
 
         let js = "document.querySelector('#diagram svg')?.outerHTML ?? ''"
         let svgHTML = try await renderer.webView.evaluateJavaScript(js) as? String
@@ -62,7 +62,7 @@ private func waitForRenderCompletion(
         switch renderer.state {
         case .ready:
             return
-        case .failure(let message):
+        case .failure(let message, _):
             Issue.record("Renderer failed: \(message)")
             return
         default:

@@ -6,7 +6,6 @@ import AppKit
 @MainActor
 class MermaidRenderer: NSObject, ObservableObject {
     @Published var state: MermaidRenderState = .idle
-    @Published var currentError: MermaidError?
     @Published var zoomLevel: Double = 1.0
     @Published var theme: MermaidTheme = .auto {
         didSet {
@@ -85,7 +84,6 @@ class MermaidRenderer: NSObject, ObservableObject {
         lastSource = source
 
         renderTask?.cancel()
-        currentError = nil
         
         guard mermaidReady else {
             logger.info("Mermaid not ready, queueing render")
@@ -109,7 +107,11 @@ class MermaidRenderer: NSObject, ObservableObject {
         let trimmed = source.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !trimmed.isEmpty else {
             state = .idle
-            clearDiagram()
+            do {
+                try await clearDiagram()
+            } catch {
+                logger.error("Failed to clear diagram: \(error.localizedDescription, privacy: .public)")
+            }
             return
         }
 
@@ -142,32 +144,27 @@ class MermaidRenderer: NSObject, ObservableObject {
                         if !metrics.hasSVG {
                             let message = "Render reported success, but no SVG was found in preview."
                             logger.error("\(message, privacy: .public)")
-                            state = .failure(message)
-                            currentError = MermaidError(message: message, line: nil)
+                            state = .failure(message: message)
                             return
                         }
                         let viewHasSize = webView.bounds.width > 1 && webView.bounds.height > 1
                         if viewHasSize && (metrics.width <= 1 || metrics.height <= 1) {
                             let message = "Rendered SVG has invalid size (\(metrics.width)x\(metrics.height))."
                             logger.error("\(message, privacy: .public)")
-                            state = .failure(message)
-                            currentError = MermaidError(message: message, line: nil)
+                            state = .failure(message: message)
                             return
                         }
                     }
                     logger.info("Render succeeded")
                     state = .ready
-                    currentError = nil
                 } else if let error = dict["error"] as? String {
                     logger.info("Render failed: \(error)")
                     let line = dict["line"] as? Int
-                    state = .failure(error)
-                    currentError = MermaidError(message: error, line: line)
+                    state = .failure(message: error, line: line)
                 } else {
                     let fallbackError = "Failed to render diagram"
                     logger.error("\(fallbackError, privacy: .public)")
-                    state = .failure(fallbackError)
-                    currentError = MermaidError(message: fallbackError, line: nil)
+                    state = .failure(message: fallbackError)
                 }
             } else {
                 state = .ready
@@ -177,20 +174,14 @@ class MermaidRenderer: NSObject, ObservableObject {
         } catch {
             if !Task.isCancelled {
                 logger.error("Render failed: \(error.localizedDescription)")
-                state = .failure(error.localizedDescription)
+                state = .failure(message: error.localizedDescription)
                 await auditPreviewDOM(context: "render-error")
             }
         }
     }
 
-    private func clearDiagram() {
-        Task {
-            do {
-                try await webView.evaluateJavaScript("document.getElementById('diagram').innerHTML = '';")
-            } catch {
-                logger.error("Failed to clear preview DOM: \(error.localizedDescription, privacy: .public)")
-            }
-        }
+    private func clearDiagram() async throws {
+        try await webView.evaluateJavaScript("document.getElementById('diagram').innerHTML = '';")
     }
 
     private func loadBaseHTML() {
@@ -206,7 +197,7 @@ class MermaidRenderer: NSObject, ObservableObject {
 
         guard let previewURL else {
             logger.error("Failed to find bundled preview.html")
-            state = .failure("Missing preview renderer resource")
+            state = .failure(message: "Missing preview renderer resource")
             return
         }
 
