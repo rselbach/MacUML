@@ -3,6 +3,7 @@ import AppKit
 
 final class CodeTextView: NSTextView {
     static let indentString = "    "
+    private static let highlightDebounceInterval: TimeInterval = 0.1
     private let highlighter = MermaidHighlighter.shared
     private var highlightWorkItem: DispatchWorkItem?
     private var pendingHighlightRange: NSRange?
@@ -46,7 +47,7 @@ final class CodeTextView: NSTextView {
             self.applyErrorHighlighting()
         }
         highlightWorkItem = workItem
-        DispatchQueue.main.asyncAfter(deadline: .now() + 0.05, execute: workItem)
+        DispatchQueue.main.asyncAfter(deadline: .now() + Self.highlightDebounceInterval, execute: workItem)
     }
 
     func applyInitialHighlighting() {
@@ -319,7 +320,6 @@ final class CodeTextView: NSTextView {
 struct EditorView: NSViewRepresentable {
     @Binding var text: String
     var errorLine: Int?
-    @ObservedObject private var settings = AppSettings.shared
 
     func makeNSView(context: Context) -> NSScrollView {
         let scrollView = NSScrollView()
@@ -335,7 +335,7 @@ struct EditorView: NSViewRepresentable {
 
         textView.delegate = context.coordinator
         textView.isRichText = false
-        textView.font = settings.editorFont
+        textView.font = AppSettings.shared.editorFont
         textView.textColor = NSColor.textColor
         textView.backgroundColor = NSColor.textBackgroundColor
         textView.isAutomaticQuoteSubstitutionEnabled = false
@@ -353,11 +353,11 @@ struct EditorView: NSViewRepresentable {
         scrollView.hasHorizontalScroller = false
         scrollView.autohidesScrollers = true
         scrollView.verticalRulerView = LineNumberRulerView(textView: textView)
-        scrollView.hasVerticalRuler = settings.showLineNumbers
-        scrollView.rulersVisible = settings.showLineNumbers
+        scrollView.hasVerticalRuler = AppSettings.shared.showLineNumbers
+        scrollView.rulersVisible = AppSettings.shared.showLineNumbers
 
         if let rulerView = scrollView.verticalRulerView as? LineNumberRulerView {
-            rulerView.refresh(using: settings.editorFont)
+            rulerView.refresh(using: AppSettings.shared.editorFont)
         }
 
         return scrollView
@@ -365,15 +365,22 @@ struct EditorView: NSViewRepresentable {
 
     func updateNSView(_ scrollView: NSScrollView, context: Context) {
         guard let textView = scrollView.documentView as? CodeTextView else { return }
+        let settings = AppSettings.shared
         let fontChanged = textView.font != settings.editorFont
         if fontChanged {
             textView.font = settings.editorFont
         }
-        
+
         if textView.string != text {
-            let selectedRanges = textView.selectedRanges
+            let previousRanges = textView.selectedRanges
+            let newText = text as NSString
             textView.string = text
-            textView.selectedRanges = selectedRanges
+            textView.selectedRanges = previousRanges.map { rangeValue in
+                guard let range = rangeValue as? NSRange else { return rangeValue }
+                let clampedLocation = min(range.location, newText.length)
+                let clampedLength = min(range.length, max(0, newText.length - clampedLocation))
+                return NSRange(location: clampedLocation, length: clampedLength) as NSValue
+            }
             textView.applyInitialHighlighting()
 
             if let rulerView = scrollView.verticalRulerView as? LineNumberRulerView {
