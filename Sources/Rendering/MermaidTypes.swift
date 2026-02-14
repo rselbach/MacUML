@@ -4,7 +4,14 @@ enum MermaidRenderState: Equatable {
     case idle
     case rendering
     case ready
-    case failure(String)
+    case failure(message: String, line: Int? = nil)
+    
+    var error: MermaidError? {
+        if case .failure(let message, let line) = self {
+            return MermaidError(message: message, line: line)
+        }
+        return nil
+    }
 }
 
 struct MermaidError: Equatable {

@@ -62,7 +62,7 @@ private func waitForRenderCompletion(
         switch renderer.state {
         case .ready:
             return
-        case .failure(let message):
+        case .failure(let message, _):
             Issue.record("Renderer failed: \(message)")
             return
         default:

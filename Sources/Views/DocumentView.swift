@@ -8,9 +8,9 @@ struct DocumentView: View {
     var body: some View {
         HSplitView {
             VStack(spacing: 0) {
-                EditorView(text: $document.text, errorLine: renderer.currentError?.line)
+                EditorView(text: $document.text, errorLine: renderer.state.error?.line)
                 
-                if let error = renderer.currentError {
+                if let error = renderer.state.error {
                     errorBar(error: error)
                 }
             }

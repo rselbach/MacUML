@@ -20,7 +20,7 @@ struct PreviewPane: View {
                 case .rendering, .ready:
                     MermaidWebView(renderer: renderer)
 
-                case .failure(let message):
+                case .failure(let message, _):
                     MermaidWebView(renderer: renderer)
                     Text(message)
                         .font(.caption)

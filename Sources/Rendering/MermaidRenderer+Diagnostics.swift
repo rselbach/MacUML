@@ -63,14 +63,14 @@ extension MermaidRenderer {
                 "Preview runtime invalid: hasMermaid=\(lastFlags.hasMermaid, privacy: .public), hasRenderDiagram=\(lastFlags.hasRenderDiagram, privacy: .public), hasSetTheme=\(lastFlags.hasSetTheme, privacy: .public), hasSetZoom=\(lastFlags.hasSetZoom, privacy: .public)"
             )
             if hasSource {
-                state = .failure("Preview runtime failed (mermaid:\(lastFlags.hasMermaid), render:\(lastFlags.hasRenderDiagram), theme:\(lastFlags.hasSetTheme), zoom:\(lastFlags.hasSetZoom))")
+                state = .failure(message: "Preview runtime failed (mermaid:\(lastFlags.hasMermaid), render:\(lastFlags.hasRenderDiagram), theme:\(lastFlags.hasSetTheme), zoom:\(lastFlags.hasSetZoom))")
             }
             return
         }
 
         logger.error("Preview runtime validation returned no usable result")
         if hasSource {
-            state = .failure("Preview runtime did not initialize")
+            state = .failure(message: "Preview runtime did not initialize")
         }
     }
 
