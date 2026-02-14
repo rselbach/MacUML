@@ -2,9 +2,11 @@
 <html>
 <head>
     <meta charset="UTF-8">
+    <!-- CSP allows 'unsafe-inline' for scripts and styles because Mermaid.js injects
+         inline styles during diagram rendering. This is required for proper rendering. -->
     <meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'self' 'unsafe-inline'; style-src 'self' 'unsafe-inline'; img-src 'self' data:; connect-src 'none';">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <script src="mermaid.min.js"></script>
+    <script src="mermaid.min.js" defer></script>
     <script>
         window.currentTheme = 'auto';
         window.renderSequence = 0;
@@ -73,6 +75,8 @@
             updateBackground();
             cleanupUnexpectedBodyNodes('DOMContentLoaded');
 
+            // MutationObserver runs continuously to clean up unexpected DOM nodes that Mermaid may inject.
+            // This is intentional simplicity vs. conditional activation.
             const observer = new MutationObserver((mutations) => {
                 let hasUnexpectedMutation = false;
                 const diagram = document.getElementById('diagram');
@@ -240,6 +244,7 @@
             svgEl.setAttribute('preserveAspectRatio', 'xMidYMid meet');
         };
 
+        // ResizeObserver runs continuously for responsive SVG scaling. Intentional simplicity.
         new ResizeObserver(() => {
             window.rescaleSVG();
             window.setPan(window.panX, window.panY);
