@@ -80,3 +80,8 @@ struct DocumentView: View {
         .accessibilityLabel("Diagram Error")
     }
 }
+
+// Both onChange and onAppear call render(), but this is safe because:
+// 1. onChange does NOT fire on initial load (SwiftUI behavior)
+// 2. onAppear handles the initial render when document opens
+// 3. MermaidRenderer.render() guards against duplicates via `guard source != lastSource`
