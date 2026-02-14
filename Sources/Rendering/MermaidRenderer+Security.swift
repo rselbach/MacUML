@@ -35,12 +35,12 @@ extension MermaidRenderer: WKNavigationDelegate {
         decidePolicyFor navigationAction: WKNavigationAction,
         decisionHandler: @escaping @MainActor @Sendable (WKNavigationActionPolicy) -> Void
     ) {
-        decisionHandler(Self.navigationPolicy(for: navigationAction.request.url, trustedLocalFiles: trustedPreviewFiles))
+        decisionHandler(Self.navigationPolicy(for: navigationAction.request.url, trustedLocalFiles: validator.trustedPreviewFiles))
     }
 
     nonisolated func webView(_ webView: WKWebView, didFinish navigation: WKNavigation!) {
         Task { @MainActor in
-            schedulePreviewRuntimeValidation()
+            validator.scheduleValidation()
         }
     }
 

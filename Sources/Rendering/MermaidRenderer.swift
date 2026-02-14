@@ -29,10 +29,9 @@ class MermaidRenderer: NSObject, ObservableObject {
         }
     }
     let webView: DiagramWebView
+    let validator: DiagramRuntimeValidator
     internal var lastSource: String = ""
     private var renderTask: Task<Void, Never>?
-    internal var previewRuntimeValidationTask: Task<Void, Never>?
-    internal var trustedPreviewFiles: Set<URL> = []
     private let debounceInterval: Duration = .milliseconds(300)
     internal let logger = Logger(subsystem: "com.macuml", category: "mermaid")
     internal var mermaidReady = false
@@ -40,9 +39,6 @@ class MermaidRenderer: NSObject, ObservableObject {
     internal let zoomStep: Double = 0.1
     internal let minZoom: Double = 0.25
     internal let maxZoom: Double = 5.0
-    internal let validationMaxAttempts: Int = 20
-    internal let validationInitialDelay: Duration = .milliseconds(50)
-    internal let validationMaxDelay: Duration = .milliseconds(500)
 
     override init() {
         let config = WKWebViewConfiguration()
@@ -59,7 +55,15 @@ class MermaidRenderer: NSObject, ObservableObject {
 #endif
         webView.underPageBackgroundColor = .clear
 
+        validator = DiagramRuntimeValidator(webView: webView)
+
         super.init()
+
+        validator.configure(
+            hasSource: { [weak self] in self?.hasSourceContent() ?? false },
+            onReady: { [weak self] in self?.handleValidatorReady() },
+            onFailure: { [weak self] message in self?.handleValidatorFailure(message: message) }
+        )
         
         theme = AppSettings.shared.defaultDiagramTheme
 
@@ -105,7 +109,7 @@ class MermaidRenderer: NSObject, ObservableObject {
         guard mermaidReady else {
             logger.info("Mermaid not ready, queueing render")
             pendingSource = source
-            schedulePreviewRuntimeValidation()
+            validator.scheduleValidation()
             return
         }
 
@@ -157,7 +161,7 @@ class MermaidRenderer: NSObject, ObservableObject {
                         logger.debug("Dropping stale render result")
                         return
                     }
-                    if let metrics = await fetchDiagramMetrics() {
+                    if let metrics = await validator.fetchMetrics() {
                         if !metrics.hasSVG {
                             let message = "Render reported success, but no SVG was found in preview."
                             logger.error("\(message, privacy: .public)")
@@ -187,12 +191,12 @@ class MermaidRenderer: NSObject, ObservableObject {
                 state = .ready
             }
 
-            await auditPreviewDOM(context: "post-render")
+            await validator.auditDOM(context: "post-render")
         } catch {
             if !Task.isCancelled {
                 logger.error("Render failed: \(error.localizedDescription)")
                 state = .failure(message: error.localizedDescription)
-                await auditPreviewDOM(context: "render-error")
+                await validator.auditDOM(context: "render-error")
             }
         }
     }
@@ -219,7 +223,7 @@ class MermaidRenderer: NSObject, ObservableObject {
         }
 
         let normalizedPreviewURL = Self.normalizedFileURL(previewURL)
-        trustedPreviewFiles = [normalizedPreviewURL]
+        validator.trustedPreviewFiles = [normalizedPreviewURL]
         webView.loadFileURL(normalizedPreviewURL, allowingReadAccessTo: normalizedPreviewURL.deletingLastPathComponent())
     }
 
@@ -234,5 +238,20 @@ class MermaidRenderer: NSObject, ObservableObject {
             pendingSource = nil
             render(source: source, force: true)
         }
+    }
+
+    private func hasSourceContent() -> Bool {
+        !lastSource.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+    }
+
+    private func handleValidatorReady() {
+        if !mermaidReady {
+            logger.info("Validator detected readiness before callback; enabling fallback")
+            handleMermaidReady()
+        }
+    }
+
+    private func handleValidatorFailure(message: String) {
+        state = .failure(message: message)
     }
 }
