@@ -7,8 +7,8 @@ final class CodeTextView: NSTextView {
     private let highlighter = MermaidHighlighter.shared
     private var highlightWorkItem: DispatchWorkItem?
     private var pendingHighlightRange: NSRange?
-    private var errorLine: Int?
-    private var previousErrorRange: NSRange?
+    var errorLine: Int?
+    var previousErrorRange: NSRange?
 
     override func shouldChangeText(in affectedCharRange: NSRange, replacementString: String?) -> Bool {
         let allowed = super.shouldChangeText(in: affectedCharRange, replacementString: replacementString)
@@ -96,228 +96,12 @@ final class CodeTextView: NSTextView {
             }
         }
     }
-    
-    func setErrorLine(_ line: Int?) {
-        guard errorLine != line else { return }
-        errorLine = line
-        applyErrorHighlighting()
-    }
-    
-    private func applyErrorHighlighting() {
-        guard let storage = textStorage else { return }
-        let text = storage.string as NSString
-
-        if let previousErrorRange {
-            removeErrorAttributes(in: previousErrorRange, storage: storage)
-            self.previousErrorRange = nil
-        }
-
-        guard let errorLine, let range = lineRange(for: errorLine, in: text) else { return }
-
-        storage.addAttribute(.backgroundColor, value: NSColor.systemRed.withAlphaComponent(0.2), range: range)
-        storage.addAttribute(.underlineStyle, value: NSUnderlineStyle.single.rawValue, range: range)
-        storage.addAttribute(.underlineColor, value: NSColor.systemRed, range: range)
-        previousErrorRange = range
-    }
-
-    private func removeErrorAttributes(in range: NSRange, storage: NSTextStorage) {
-        guard let clampedRange = clampedRange(range, maxLength: storage.length) else { return }
-        storage.removeAttribute(.underlineStyle, range: clampedRange)
-        storage.removeAttribute(.underlineColor, range: clampedRange)
-        storage.removeAttribute(.backgroundColor, range: clampedRange)
-    }
-
-    private func clampedRange(_ range: NSRange, maxLength: Int) -> NSRange? {
-        guard maxLength > 0,
-              range.location != NSNotFound,
-              range.location < maxLength else {
-            return nil
-        }
-
-        let documentRange = NSRange(location: 0, length: maxLength)
-        let clampedRange = NSIntersectionRange(range, documentRange)
-        guard clampedRange.length > 0 else {
-            return nil
-        }
-
-        return clampedRange
-    }
-
-    private func lineRange(for oneBasedLine: Int, in text: NSString) -> NSRange? {
-        guard oneBasedLine > 0 else {
-            return nil
-        }
-
-        var currentLine = 1
-        var lineStart = 0
-
-        while currentLine < oneBasedLine && lineStart < text.length {
-            let currentRange = text.lineRange(for: NSRange(location: lineStart, length: 0))
-            lineStart = currentRange.upperBound
-            currentLine += 1
-        }
-
-        guard currentLine == oneBasedLine,
-              lineStart < text.length else {
-            return nil
-        }
-
-        return text.lineRange(for: NSRange(location: lineStart, length: 0))
-    }
-    
-    private enum KeyCode: UInt16 {
-        case tab = 48
-        case returnKey = 36
-        case home = 115
-        case end = 119
-        case pageUp = 116
-        case pageDown = 121
-        case leftArrow = 123
-        case rightArrow = 124
-        case upArrow = 126
-        case downArrow = 125
-    }
 
     override func keyDown(with event: NSEvent) {
-        let flags = event.modifierFlags.intersection(.deviceIndependentFlagsMask)
-        let hasShift = flags.contains(.shift)
-        
-        switch event.keyCode {
-        case KeyCode.tab.rawValue:
-            if hasShift {
-                unindentSelection()
-            } else {
-                indentSelection()
-            }
-        case KeyCode.returnKey.rawValue:
-            insertNewlineWithIndent()
-        case KeyCode.home.rawValue:
-            if hasShift {
-                moveToBeginningOfLineAndModifySelection(nil)
-            } else {
-                moveToBeginningOfLine(nil)
-            }
-        case KeyCode.end.rawValue:
-            if hasShift {
-                moveToEndOfLineAndModifySelection(nil)
-            } else {
-                moveToEndOfLine(nil)
-            }
-        case KeyCode.pageUp.rawValue:
-            if hasShift {
-                pageUpAndModifySelection(nil)
-            } else {
-                pageUp(nil)
-            }
-        case KeyCode.pageDown.rawValue:
-            if hasShift {
-                pageDownAndModifySelection(nil)
-            } else {
-                pageDown(nil)
-            }
-        case KeyCode.leftArrow.rawValue:
-            if flags.contains(.command) {
-                if hasShift {
-                    moveToBeginningOfLineAndModifySelection(nil)
-                } else {
-                    moveToBeginningOfLine(nil)
-                }
-            } else {
-                super.keyDown(with: event)
-            }
-        case KeyCode.rightArrow.rawValue:
-            if flags.contains(.command) {
-                if hasShift {
-                    moveToEndOfLineAndModifySelection(nil)
-                } else {
-                    moveToEndOfLine(nil)
-                }
-            } else {
-                super.keyDown(with: event)
-            }
-        case KeyCode.upArrow.rawValue:
-            if flags.contains(.command) {
-                if hasShift {
-                    moveToBeginningOfDocumentAndModifySelection(nil)
-                } else {
-                    moveToBeginningOfDocument(nil)
-                }
-            } else {
-                super.keyDown(with: event)
-            }
-        case KeyCode.downArrow.rawValue:
-            if flags.contains(.command) {
-                if hasShift {
-                    moveToEndOfDocumentAndModifySelection(nil)
-                } else {
-                    moveToEndOfDocument(nil)
-                }
-            } else {
-                super.keyDown(with: event)
-            }
-        default:
-            super.keyDown(with: event)
-        }
-    }
-    
-    private func indentSelection() {
-        let range = selectedRange()
-        let text = string as NSString
-        
-        if range.length == 0 {
-            insertText(Self.indentString, replacementRange: range)
+        if handleKeyDown(event) {
             return
         }
-        
-        let lineRange = text.lineRange(for: range)
-        var lines = text.substring(with: lineRange).components(separatedBy: "\n")
-        
-        if lines.last == "" { lines.removeLast() }
-        
-        let indented = lines.map { Self.indentString + $0 }.joined(separator: "\n")
-        let finalText = lineRange.upperBound < text.length ? indented + "\n" : indented
-        
-        if shouldChangeText(in: lineRange, replacementString: finalText) {
-            replaceCharacters(in: lineRange, with: finalText)
-            didChangeText()
-            setSelectedRange(NSRange(location: lineRange.location, length: finalText.count))
-        }
-    }
-    
-    private func unindentSelection() {
-        let range = selectedRange()
-        let text = string as NSString
-        let lineRange = text.lineRange(for: range)
-        var lines = text.substring(with: lineRange).components(separatedBy: "\n")
-        
-        if lines.last == "" { lines.removeLast() }
-        
-        let unindented = lines.map { line -> String in
-            if line.hasPrefix(Self.indentString) {
-                return String(line.dropFirst(Self.indentString.count))
-            } else if line.hasPrefix("\t") {
-                return String(line.dropFirst(1))
-            }
-            return line.drop(while: { $0 == " " }).description.isEmpty ? line : String(line.drop(while: { $0 == " " }))
-        }.joined(separator: "\n")
-        
-        let finalText = lineRange.upperBound < text.length ? unindented + "\n" : unindented
-        
-        if shouldChangeText(in: lineRange, replacementString: finalText) {
-            replaceCharacters(in: lineRange, with: finalText)
-            didChangeText()
-            setSelectedRange(NSRange(location: lineRange.location, length: finalText.count))
-        }
-    }
-    
-    private func insertNewlineWithIndent() {
-        let text = string as NSString
-        let cursorLocation = selectedRange().location
-        let lineStart = text.lineRange(for: NSRange(location: cursorLocation, length: 0)).location
-        let linePrefix = text.substring(with: NSRange(location: lineStart, length: cursorLocation - lineStart))
-        
-        let indent = String(linePrefix.prefix(while: { $0 == " " || $0 == "\t" }))
-        insertText("\n" + indent, replacementRange: selectedRange())
+        super.keyDown(with: event)
     }
 }
 
@@ -328,7 +112,7 @@ struct EditorView: NSViewRepresentable {
     func makeNSView(context: Context) -> NSScrollView {
         let scrollView = NSScrollView()
         let textView = CodeTextView()
-        
+
         textView.minSize = NSSize(width: 0, height: 0)
         textView.maxSize = NSSize(width: CGFloat.greatestFiniteMagnitude, height: CGFloat.greatestFiniteMagnitude)
         textView.isVerticallyResizable = true
@@ -351,7 +135,7 @@ struct EditorView: NSViewRepresentable {
 
         textView.string = text
         textView.applyInitialHighlighting()
-        
+
         scrollView.documentView = textView
         scrollView.hasVerticalScroller = true
         scrollView.hasHorizontalScroller = false
