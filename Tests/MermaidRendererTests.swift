@@ -58,7 +58,7 @@ private func waitForRenderCompletion(
     let clock = ContinuousClock()
     let deadline = clock.now + timeout
 
-    while clock.now < deadline {
+    repeat {
         switch renderer.state {
         case .ready:
             return
@@ -66,9 +66,11 @@ private func waitForRenderCompletion(
             Issue.record("Renderer failed: \(message)")
             return
         default:
+            if clock.now >= deadline {
+                Issue.record("Render timed out after \(timeout) - state: \(renderer.state)")
+                return
+            }
             try await Task.sleep(for: .milliseconds(50))
         }
-    }
-
-    Issue.record("Render timed out after \(timeout) - state: \(renderer.state)")
+    } while true
 }
