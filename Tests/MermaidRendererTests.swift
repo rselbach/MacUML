@@ -17,7 +17,6 @@ struct MermaidRendererTests {
         let renderer = MermaidRenderer()
         renderer.render(source: "   ")
 
-        // Wait for debounce
         try await Task.sleep(for: .milliseconds(400))
 
         #expect(renderer.state == .idle)
@@ -29,21 +28,7 @@ struct MermaidRendererTests {
         let renderer = MermaidRenderer()
         renderer.render(source: "flowchart TD\nA-->B")
 
-        for _ in 0..<30 {
-            if case .ready = renderer.state {
-                break
-            }
-            if case .failure = renderer.state {
-                break
-            }
-            try await Task.sleep(for: .milliseconds(200))
-        }
-
-        if case .failure(let message) = renderer.state {
-            Issue.record("Renderer failed: \(message)")
-        }
-
-        #expect(renderer.state == .ready)
+        try await waitForRenderCompletion(renderer: renderer, timeout: .seconds(3))
 
         let js = "document.querySelector('#diagram svg')?.outerHTML ?? ''"
         let svgHTML = try await renderer.webView.evaluateJavaScript(js) as? String
@@ -57,24 +42,33 @@ struct MermaidRendererTests {
         try await Task.sleep(for: .milliseconds(400))
         renderer.render(source: "flowchart TD\nA-->B")
 
-        for _ in 0..<30 {
-            if case .ready = renderer.state {
-                break
-            }
-            if case .failure = renderer.state {
-                break
-            }
-            try await Task.sleep(for: .milliseconds(200))
-        }
-
-        if case .failure(let message) = renderer.state {
-            Issue.record("Renderer failed after delayed render: \(message)")
-        }
-
-        #expect(renderer.state == .ready)
+        try await waitForRenderCompletion(renderer: renderer, timeout: .seconds(3))
 
         let js = "document.querySelector('#diagram svg')?.outerHTML ?? ''"
         let svgHTML = try await renderer.webView.evaluateJavaScript(js) as? String
         #expect(svgHTML?.isEmpty == false)
     }
+}
+
+@MainActor
+private func waitForRenderCompletion(
+    renderer: MermaidRenderer,
+    timeout: Duration
+) async throws {
+    let clock = ContinuousClock()
+    let deadline = clock.now + timeout
+
+    while clock.now < deadline {
+        switch renderer.state {
+        case .ready:
+            return
+        case .failure(let message):
+            Issue.record("Renderer failed: \(message)")
+            return
+        default:
+            try await Task.sleep(for: .milliseconds(50))
+        }
+    }
+
+    Issue.record("Render timed out after \(timeout) - state: \(renderer.state)")
 }
