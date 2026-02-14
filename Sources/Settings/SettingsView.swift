@@ -1,7 +1,7 @@
 import SwiftUI
 
 struct SettingsView: View {
-    @ObservedObject private var settings = AppSettings.shared
+    @StateObject private var settings = AppSettings.shared
     
     var body: some View {
         Form {
