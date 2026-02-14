@@ -218,7 +218,7 @@ class MermaidRenderer: NSObject, ObservableObject {
             return
         }
 
-        let normalizedPreviewURL = Self.normalizedFileURL(previewURL)
+        let normalizedPreviewURL = DiagramSecurityPolicy.normalizedFileURL(previewURL)
         trustedPreviewFiles = [normalizedPreviewURL]
         webView.loadFileURL(normalizedPreviewURL, allowingReadAccessTo: normalizedPreviewURL.deletingLastPathComponent())
     }
