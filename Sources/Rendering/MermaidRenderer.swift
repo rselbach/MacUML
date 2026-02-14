@@ -26,6 +26,9 @@ class MermaidRenderer: NSObject, ObservableObject {
     internal let zoomStep: Double = 0.1
     internal let minZoom: Double = 0.25
     internal let maxZoom: Double = 5.0
+    internal let validationMaxAttempts: Int = 20
+    internal let validationInitialDelay: Duration = .milliseconds(50)
+    internal let validationMaxDelay: Duration = .milliseconds(500)
 
     override init() {
         let config = WKWebViewConfiguration()
