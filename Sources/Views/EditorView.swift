@@ -42,8 +42,10 @@ final class CodeTextView: NSTextView {
             guard let self, let storage = self.textStorage else { return }
             let range = self.pendingHighlightRange
             self.pendingHighlightRange = nil
-            self.highlighter.highlight(storage, in: range)
-            self.applyErrorHighlighting()
+            Task { @MainActor [weak self] in
+                await self?.highlighter.highlight(storage, in: range)
+                self?.applyErrorHighlighting()
+            }
         }
         highlightWorkItem = workItem
         DispatchQueue.main.asyncAfter(deadline: .now() + 0.05, execute: workItem)
@@ -52,8 +54,10 @@ final class CodeTextView: NSTextView {
     func applyInitialHighlighting() {
         guard let storage = textStorage else { return }
         pendingHighlightRange = nil
-        highlighter.highlight(storage)
-        applyErrorHighlighting()
+        Task { @MainActor [weak self] in
+            await self?.highlighter.highlight(storage)
+            self?.applyErrorHighlighting()
+        }
     }
 
     private func queueIncrementalHighlightRange() {
