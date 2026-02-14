@@ -119,10 +119,13 @@
             }
         });
 
-        window.setTheme = function(theme) {
+        window.setTheme = async function(theme) {
             window.currentTheme = theme;
             initMermaid();
             updateBackground();
+            if (window.lastSource) {
+                await window.renderDiagram(window.lastSource);
+            }
         };
 
         window.zoomLevel = 1.0;

@@ -12,11 +12,7 @@ extension MermaidRenderer {
                 )
             } catch {
                 self.logger.error("Failed to apply preview theme '\(self.theme.rawValue, privacy: .public)': \(error.localizedDescription, privacy: .public)")
-                return
             }
-
-            guard !self.lastSource.isEmpty else { return }
-            await self.performRender(source: self.lastSource)
         }
     }
 }
