@@ -1,6 +1,15 @@
 import SwiftUI
 import Sparkle
 
+private enum Constants {
+    static let mainVStackSpacing: CGFloat = 16
+    static let iconSize: CGFloat = 128
+    static let dividerWidth: CGFloat = 200
+    static let updateSectionSpacing: CGFloat = 12
+    static let contentPadding: CGFloat = 32
+    static let windowWidth: CGFloat = 300
+}
+
 struct AboutView: View {
     let updater: SPUUpdater?
     
@@ -10,11 +19,11 @@ struct AboutView: View {
     @State private var automaticallyChecks = false
     
     var body: some View {
-        VStack(spacing: 16) {
+        VStack(spacing: Constants.mainVStackSpacing) {
             if let iconImage = NSApp.applicationIconImage {
                 Image(nsImage: iconImage)
                     .resizable()
-                    .frame(width: 128, height: 128)
+                    .frame(width: Constants.iconSize, height: Constants.iconSize)
             }
             
             Text("MacUML")
@@ -32,9 +41,9 @@ struct AboutView: View {
             
             if updater != nil {
                 Divider()
-                    .frame(width: 200)
+                    .frame(width: Constants.dividerWidth)
                 
-                VStack(spacing: 12) {
+                VStack(spacing: Constants.updateSectionSpacing) {
                     Toggle("Check for updates automatically", isOn: $automaticallyChecks)
                         .toggleStyle(.checkbox)
                         .onChange(of: automaticallyChecks) { _, newValue in
@@ -49,14 +58,14 @@ struct AboutView: View {
             }
             
             Divider()
-                .frame(width: 200)
+                .frame(width: Constants.dividerWidth)
             
             Text("© 2025 Roberto Selbach")
                 .font(.caption)
                 .foregroundStyle(.tertiary)
         }
-        .padding(32)
-        .frame(width: 300)
+        .padding(Constants.contentPadding)
+        .frame(width: Constants.windowWidth)
         .onAppear {
             automaticallyChecks = updater?.automaticallyChecksForUpdates ?? false
         }

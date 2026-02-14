@@ -2,6 +2,19 @@ import SwiftUI
 import WebKit
 import AppKit
 
+private enum Constants {
+    static let zoomButtonSpacing: CGFloat = 6
+    static let zoomLevelMinWidth: CGFloat = 42
+    static let themePickerSpacing: CGFloat = 4
+    static let toolbarHorizontalPadding: CGFloat = 12
+    static let toolbarVerticalPadding: CGFloat = 6
+    static let errorMessageHorizontalPadding: CGFloat = 10
+    static let errorMessageVerticalPadding: CGFloat = 6
+    static let errorMessageBackgroundOpacity: Double = 0.9
+    static let errorMessageOuterPadding: CGFloat = 12
+    static let errorMessageCornerRadius: CGFloat = 6
+}
+
 struct PreviewPane: View {
     @ObservedObject var renderer: MermaidRenderer
 
@@ -25,11 +38,11 @@ struct PreviewPane: View {
                     Text(message)
                         .font(.caption)
                         .foregroundStyle(.white)
-                        .padding(.horizontal, 10)
-                        .padding(.vertical, 6)
-                        .background(Color.red.opacity(0.9))
-                        .clipShape(RoundedRectangle(cornerRadius: 6))
-                        .padding(12)
+                        .padding(.horizontal, Constants.errorMessageHorizontalPadding)
+                        .padding(.vertical, Constants.errorMessageVerticalPadding)
+                        .background(Color.red.opacity(Constants.errorMessageBackgroundOpacity))
+                        .clipShape(RoundedRectangle(cornerRadius: Constants.errorMessageCornerRadius))
+                        .padding(Constants.errorMessageOuterPadding)
                         .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
                 }
             }
@@ -38,7 +51,7 @@ struct PreviewPane: View {
     
     private var toolbar: some View {
         HStack {
-            HStack(spacing: 6) {
+            HStack(spacing: Constants.zoomButtonSpacing) {
                 Button {
                     renderer.zoomOut()
                 } label: {
@@ -67,13 +80,13 @@ struct PreviewPane: View {
                 Text("\(Int((renderer.zoomLevel * 100).rounded()))%")
                     .font(.caption.monospacedDigit())
                     .foregroundStyle(.secondary)
-                    .frame(minWidth: 42, alignment: .trailing)
+                    .frame(minWidth: Constants.zoomLevelMinWidth, alignment: .trailing)
                     .accessibilityLabel("Zoom level \(Int((renderer.zoomLevel * 100).rounded())) percent")
             }
 
             Spacer()
             
-            HStack(spacing: 4) {
+            HStack(spacing: Constants.themePickerSpacing) {
                 Text("Theme:")
                     .foregroundStyle(.secondary)
                     .font(.caption)
@@ -88,8 +101,8 @@ struct PreviewPane: View {
                 .accessibilityLabel("Diagram Theme")
             }
         }
-        .padding(.horizontal, 12)
-        .padding(.vertical, 6)
+        .padding(.horizontal, Constants.toolbarHorizontalPadding)
+        .padding(.vertical, Constants.toolbarVerticalPadding)
         .background(Color(nsColor: .windowBackgroundColor))
     }
 }

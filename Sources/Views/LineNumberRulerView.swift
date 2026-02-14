@@ -7,6 +7,8 @@ private enum Constants {
     static let horizontalPadding: CGFloat = 8
     static let fontSizeRatio: CGFloat = 0.85
     static let minimumFontSize: CGFloat = 10
+    static let separatorLineXOffset: CGFloat = 0.5
+    static let separatorAlpha: CGFloat = 0.6
 }
 
 final class LineNumberRulerView: NSRulerView {
@@ -81,8 +83,8 @@ final class LineNumberRulerView: NSRulerView {
         NSColor.controlBackgroundColor.setFill()
         bounds.fill()
 
-        let separatorX = bounds.maxX - 0.5
-        NSColor.separatorColor.withAlphaComponent(0.6).setStroke()
+        let separatorX = bounds.maxX - Constants.separatorLineXOffset
+        NSColor.separatorColor.withAlphaComponent(Constants.separatorAlpha).setStroke()
         let separator = NSBezierPath()
         separator.move(to: NSPoint(x: separatorX, y: bounds.minY))
         separator.line(to: NSPoint(x: separatorX, y: bounds.maxY))
