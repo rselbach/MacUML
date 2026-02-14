@@ -1,20 +1,59 @@
 import Foundation
 import WebKit
+import os
 
-extension MermaidRenderer {
-    internal func schedulePreviewRuntimeValidation() {
-        guard previewRuntimeValidationTask == nil else {
-            return
-        }
+struct DiagramMetrics {
+    let hasSVG: Bool
+    let width: Double
+    let height: Double
+}
 
-        previewRuntimeValidationTask = Task { @MainActor in
-            await validatePreviewRuntime()
-            previewRuntimeValidationTask = nil
+@MainActor
+class DiagramRuntimeValidator {
+    weak var webView: DiagramWebView?
+    var trustedPreviewFiles: Set<URL> = []
+    var validationTask: Task<Void, Never>?
+
+    private let logger = Logger(subsystem: "com.macuml", category: "DiagramRuntimeValidator")
+    private let validationMaxAttempts: Int = 20
+    private let validationInitialDelay: Duration = .milliseconds(50)
+    private let validationMaxDelay: Duration = .milliseconds(500)
+
+    private var onReady: (@MainActor () -> Void)?
+    private var onFailure: (@MainActor (String) -> Void)?
+    private var hasSource: () -> Bool = { false }
+
+    init(webView: DiagramWebView) {
+        self.webView = webView
+    }
+
+    func configure(
+        hasSource: @escaping @MainActor () -> Bool,
+        onReady: @escaping @MainActor () -> Void,
+        onFailure: @escaping @MainActor (String) -> Void
+    ) {
+        self.hasSource = hasSource
+        self.onReady = onReady
+        self.onFailure = onFailure
+    }
+
+    func scheduleValidation() {
+        guard validationTask == nil else { return }
+
+        validationTask = Task { @MainActor [weak self] in
+            await self?.validateRuntime()
+            self?.validationTask = nil
         }
     }
 
-    private func validatePreviewRuntime() async {
-        let hasSource = !lastSource.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+    func cancelValidation() {
+        validationTask?.cancel()
+        validationTask = nil
+    }
+
+    private func validateRuntime() async {
+        guard let webView else { return }
+
         let js = """
             (function() {
                 return {
@@ -44,14 +83,12 @@ extension MermaidRenderer {
                 lastFlags = (hasMermaid, hasRenderDiagram, hasSetTheme, hasSetZoom)
 
                 if hasMermaid && hasRenderDiagram && hasSetTheme && hasSetZoom {
-                    if !mermaidReady {
-                        logger.info("Preview runtime validated before ready callback; enabling fallback readiness")
-                        handleMermaidReady()
-                    }
+                    logger.info("Runtime validated successfully")
+                    onReady?()
                     return
                 }
             } catch {
-                logger.error("Preview runtime validation attempt failed: \(error.localizedDescription, privacy: .public)")
+                logger.error("Validation attempt failed: \(error.localizedDescription, privacy: .public)")
             }
 
             do {
@@ -64,21 +101,24 @@ extension MermaidRenderer {
 
         if let lastFlags {
             logger.error(
-                "Preview runtime invalid: hasMermaid=\(lastFlags.hasMermaid, privacy: .public), hasRenderDiagram=\(lastFlags.hasRenderDiagram, privacy: .public), hasSetTheme=\(lastFlags.hasSetTheme, privacy: .public), hasSetZoom=\(lastFlags.hasSetZoom, privacy: .public)"
+                "Runtime invalid: hasMermaid=\(lastFlags.hasMermaid, privacy: .public), hasRenderDiagram=\(lastFlags.hasRenderDiagram, privacy: .public), hasSetTheme=\(lastFlags.hasSetTheme, privacy: .public), hasSetZoom=\(lastFlags.hasSetZoom, privacy: .public)"
             )
-            if hasSource {
-                state = .failure(message: "Preview runtime failed (mermaid:\(lastFlags.hasMermaid), render:\(lastFlags.hasRenderDiagram), theme:\(lastFlags.hasSetTheme), zoom:\(lastFlags.hasSetZoom))")
+            if hasSource() {
+                let message = "Preview runtime failed (mermaid:\(lastFlags.hasMermaid), render:\(lastFlags.hasRenderDiagram), theme:\(lastFlags.hasSetTheme), zoom:\(lastFlags.hasSetZoom))"
+                onFailure?(message)
             }
             return
         }
 
-        logger.error("Preview runtime validation returned no usable result")
-        if hasSource {
-            state = .failure(message: "Preview runtime did not initialize")
+        logger.error("Runtime validation returned no usable result")
+        if hasSource() {
+            onFailure?("Preview runtime did not initialize")
         }
     }
 
-    internal func auditPreviewDOM(context: String) async {
+    func auditDOM(context: String) async {
+        guard let webView else { return }
+
         let js = """
             if (typeof window.collectPreviewDiagnostics !== 'function') {
                 return null;
@@ -100,22 +140,24 @@ extension MermaidRenderer {
                     if let text = String(data: data, encoding: .utf8) {
                         details = text
                     } else {
-                        logger.error("Preview DOM audit (\(context, privacy: .public)) failed to decode extras payload as UTF-8")
+                        logger.error("DOM audit (\(context, privacy: .public)) failed to decode extras payload as UTF-8")
                     }
                 } catch {
-                    logger.error("Preview DOM audit (\(context, privacy: .public)) failed to serialize extras payload: \(error.localizedDescription, privacy: .public)")
+                    logger.error("DOM audit (\(context, privacy: .public)) failed to serialize extras payload: \(error.localizedDescription, privacy: .public)")
                 }
             }
 
             logger.error(
-                "Preview DOM audit (\(context, privacy: .public)): extra nodes=\(extraNodeCount, privacy: .public), details=\(details, privacy: .public)"
+                "DOM audit (\(context, privacy: .public)): extra nodes=\(extraNodeCount, privacy: .public), details=\(details, privacy: .public)"
             )
         } catch {
-            logger.error("Preview DOM audit failed (\(context, privacy: .public)): \(error.localizedDescription, privacy: .public)")
+            logger.error("DOM audit failed (\(context, privacy: .public)): \(error.localizedDescription, privacy: .public)")
         }
     }
 
-    internal func fetchDiagramMetrics() async -> (hasSVG: Bool, width: Double, height: Double)? {
+    func fetchMetrics() async -> DiagramMetrics? {
+        guard let webView else { return nil }
+
         let js = """
             (function() {
                 const svg = document.querySelector('#diagram svg');
@@ -134,7 +176,7 @@ extension MermaidRenderer {
                   let height = result["height"] as? Double else {
                 return nil
             }
-            return (hasSVG, width, height)
+            return DiagramMetrics(hasSVG: hasSVG, width: width, height: height)
         } catch {
             logger.error("Failed to fetch diagram metrics: \(error.localizedDescription, privacy: .public)")
             return nil
