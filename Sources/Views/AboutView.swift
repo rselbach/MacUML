@@ -12,10 +12,14 @@ private enum Constants {
 
 struct AboutView: View {
     let updater: SPUUpdater?
-    
+
     private let appVersion = Bundle.main.object(forInfoDictionaryKey: "CFBundleShortVersionString") as? String ?? "1.0"
     private let buildNumber = Bundle.main.object(forInfoDictionaryKey: "CFBundleVersion") as? String ?? "1"
-    
+    private let copyrightYears: String = {
+        let currentYear = Calendar.current.component(.year, from: Date())
+        return currentYear > 2025 ? "2025-\(currentYear)" : "2025"
+    }()
+
     @State private var automaticallyChecks = false
     
     var body: some View {
@@ -60,7 +64,7 @@ struct AboutView: View {
             Divider()
                 .frame(width: Constants.dividerWidth)
             
-            Text("© 2025 Roberto Selbach")
+            Text("© \(copyrightYears) Roberto Selbach")
                 .font(.caption)
                 .foregroundStyle(.tertiary)
         }
