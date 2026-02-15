@@ -12,16 +12,15 @@ private enum Constants {
 }
 
 final class LineNumberRulerView: NSRulerView {
-    private weak var textView: NSTextView?
+    private weak var textView: CodeTextView?
     private var cancellables = Set<AnyCancellable>()
     private var lineNumberAttributes: [NSAttributedString.Key: Any] = [
         .font: NSFont.monospacedDigitSystemFont(ofSize: Constants.defaultFontSize, weight: .regular),
         .foregroundColor: NSColor.secondaryLabelColor
     ]
     private var cachedLineCount = 1
-    private var lineStartOffsets: [Int] = [0]
 
-    init(textView: NSTextView) {
+    init(textView: CodeTextView) {
         guard let scrollView = textView.enclosingScrollView else {
             fatalError("LineNumberRulerView requires a text view in a scroll view")
         }
@@ -29,7 +28,7 @@ final class LineNumberRulerView: NSRulerView {
         self.textView = textView
         super.init(scrollView: scrollView, orientation: .verticalRuler)
         clientView = textView
-        rebuildLineMetadata(using: textView.string)
+        cachedLineCount = max(1, textView.lineStartOffsets.count)
         configureObservers()
         recalculateThickness()
     }
@@ -54,7 +53,7 @@ final class LineNumberRulerView: NSRulerView {
     }
 
     func resetLineCount(using text: String) {
-        rebuildLineMetadata(using: text)
+        cachedLineCount = max(1, textView?.lineStartOffsets.count ?? 1)
         recalculateThickness()
         needsDisplay = true
     }
@@ -130,9 +129,9 @@ final class LineNumberRulerView: NSRulerView {
 
         NotificationCenter.default.publisher(for: NSText.didChangeNotification, object: textView)
             .receive(on: DispatchQueue.main)
-            .sink { [weak self] notification in
-                guard let self, let textView = notification.object as? NSTextView else { return }
-                self.rebuildLineMetadata(using: textView.string)
+            .sink { [weak self] _ in
+                guard let self, let textView = self.textView else { return }
+                self.cachedLineCount = max(1, textView.lineStartOffsets.count)
                 self.recalculateThickness()
                 self.needsDisplay = true
             }
@@ -152,6 +151,7 @@ final class LineNumberRulerView: NSRulerView {
 
     private func lineNumber(for glyphLocation: Int, layoutManager: NSLayoutManager) -> Int {
         guard layoutManager.numberOfGlyphs > 0 else { return 1 }
+        guard let offsets = textView?.lineStartOffsets, !offsets.isEmpty else { return 1 }
 
         let glyphIndex = min(max(glyphLocation, 0), layoutManager.numberOfGlyphs - 1)
         let charIndex = layoutManager.characterIndexForGlyph(at: glyphIndex)
@@ -160,43 +160,16 @@ final class LineNumberRulerView: NSRulerView {
 
         // Binary search for first offset > charIndex
         var low = 0
-        var high = lineStartOffsets.count
+        var high = offsets.count
         while low < high {
             let mid = low + (high - low) / 2
-            if lineStartOffsets[mid] > charIndex {
+            if offsets[mid] > charIndex {
                 high = mid
             } else {
                 low = mid + 1
             }
         }
         return max(1, low)
-    }
-
-    private func rebuildLineMetadata(using text: String) {
-        // Trade-off: O(n) full rebuild on every text change.
-        // CodeTextView.applyLineDelta() handles incremental cachedLineCount updates,
-        // but lineStartOffsets is needed for binary search lookups in lineNumber(for:layoutManager:).
-        // Incremental offset updates would require tracking edit location and shifting all subsequent offsets,
-        // which adds complexity for typically small documents. Consider optimizing if profiling shows issues.
-        lineStartOffsets = [0]
-        if text.isEmpty {
-            cachedLineCount = 1
-            return
-        }
-
-        let nsText = text as NSString
-        var location = 0
-
-        while location < nsText.length {
-            let lineRange = nsText.lineRange(for: NSRange(location: location, length: 0))
-            let nextLineStart = NSMaxRange(lineRange)
-            if nextLineStart < nsText.length {
-                lineStartOffsets.append(nextLineStart)
-            }
-            location = nextLineStart
-        }
-
-        cachedLineCount = max(1, lineStartOffsets.count)
     }
 
     private func draw(lineNumber: Int, atY y: CGFloat) {
