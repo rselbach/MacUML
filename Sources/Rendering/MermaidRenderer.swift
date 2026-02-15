@@ -67,8 +67,18 @@ class MermaidRenderer: NSObject, ObservableObject {
         
         theme = AppSettings.shared.defaultDiagramTheme
 
-        contentController.add(ReadyHandler(renderer: self), name: "ready")
-        contentController.add(ZoomChangedHandler(renderer: self), name: "zoomChanged")
+        contentController.add(
+            ScriptMessageHandler(renderer: self, name: "ready") { renderer, _ in
+                renderer.handleMermaidReady()
+            },
+            name: "ready"
+        )
+        contentController.add(
+            ScriptMessageHandler(renderer: self, name: "zoomChanged") { renderer, body in
+                renderer.handleZoomChangedMessage(body)
+            },
+            name: "zoomChanged"
+        )
         webView.navigationDelegate = self
         webView.uiDelegate = self
         loadBaseHTML()

@@ -16,13 +16,18 @@ struct DocumentView: View {
     @Binding var document: MermaidDocument
     @StateObject private var renderer = MermaidRenderer()
 
+    // Derived state to prevent unnecessary editor re-renders
+    @State private var errorLine: Int?
+    @State private var errorMessage: String?
+    @State private var hasError = false
+
     var body: some View {
         HSplitView {
             VStack(spacing: 0) {
-                EditorView(text: $document.text, errorLine: renderer.state.error?.line)
-                
-                if let error = renderer.state.error {
-                    errorBar(error: error)
+                EditorView(text: $document.text, errorLine: errorLine)
+
+                if hasError, let message = errorMessage, let error = renderer.state.error {
+                    ErrorBar(error: error)
                 }
             }
             .frame(minWidth: Constants.editorMinWidth)
@@ -35,25 +40,37 @@ struct DocumentView: View {
         .onChange(of: document.text) { _, newValue in
             renderer.render(source: newValue)
         }
+        .onChange(of: renderer.state.error) { _, newError in
+            // Only update editor-affecting state when error actually changes
+            let newLine = newError?.line
+            let newMessage = newError?.message
+            if errorLine != newLine { errorLine = newLine }
+            if errorMessage != newMessage { errorMessage = newMessage }
+            hasError = newError != nil
+        }
         .onAppear {
             renderer.render(source: document.text)
         }
     }
-    
-    private func errorBar(error: MermaidError) -> some View {
+}
+
+private struct ErrorBar: View {
+    let error: MermaidError
+
+    var body: some View {
         HStack(spacing: Constants.errorBarSpacing) {
             Image(systemName: "exclamationmark.triangle.fill")
                 .foregroundStyle(.white)
-            
+
             if let line = error.line {
                 Text("Line \(line):")
                     .fontWeight(.medium)
             }
-            
+
             Text(error.message)
                 .lineLimit(3)
                 .truncationMode(.tail)
-            
+
             Spacer()
 
             Button("Copy") {
@@ -80,8 +97,3 @@ struct DocumentView: View {
         .accessibilityLabel("Diagram Error")
     }
 }
-
-// Both onChange and onAppear call render(), but this is safe because:
-// 1. onChange does NOT fire on initial load (SwiftUI behavior)
-// 2. onAppear handles the initial render when document opens
-// 3. MermaidRenderer.render() guards against duplicates via `guard source != lastSource`
