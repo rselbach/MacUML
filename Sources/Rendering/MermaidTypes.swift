@@ -44,13 +44,6 @@ enum MermaidTheme: String, CaseIterable {
 
     /// Human-readable display label for UI presentation.
     var label: String {
-        switch self {
-        case .auto: return "Auto"
-        case .default: return "Default"
-        case .dark: return "Dark"
-        case .forest: return "Forest"
-        case .neutral: return "Neutral"
-        case .base: return "Base"
-        }
+        rawValue.capitalized
     }
 }

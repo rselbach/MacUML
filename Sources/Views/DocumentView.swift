@@ -26,7 +26,7 @@ struct DocumentView: View {
             VStack(spacing: 0) {
                 EditorView(text: $document.text, errorLine: errorLine)
 
-                if hasError, let message = errorMessage, let error = renderer.state.error {
+                if hasError, errorMessage != nil, let error = renderer.state.error {
                     ErrorBar(error: error)
                 }
             }

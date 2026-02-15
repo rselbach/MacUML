@@ -158,18 +158,17 @@ final class LineNumberRulerView: NSRulerView {
 
         guard charIndex > 0 else { return 1 }
 
+        // Binary search for first offset > charIndex
         var low = 0
         var high = lineStartOffsets.count
-
         while low < high {
-            let mid = (low + high) / 2
-            if lineStartOffsets[mid] <= charIndex {
+            let mid = low + (high - low) / 2
+            if lineStartOffsets[mid] > charIndex {
+                high = mid
+            } else {
                 low = mid + 1
-                continue
             }
-            high = mid
         }
-
         return max(1, low)
     }
 
