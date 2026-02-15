@@ -3,7 +3,8 @@ import WebKit
 
 extension MermaidRenderer {
     internal func applyTheme() {
-        Task {
+        Task { @MainActor [weak self] in
+            guard let self else { return }
             do {
                 _ = try await webView.callAsyncJavaScript(
                     "window.setTheme(themeName);",

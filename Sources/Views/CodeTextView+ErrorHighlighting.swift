@@ -29,6 +29,12 @@ extension CodeTextView {
         previousErrorRange = range
     }
 
+    /// O(log n) line range lookup using cached line start offsets
+    func lineStartOffset(for oneBasedLine: Int) -> Int? {
+        guard oneBasedLine > 0, oneBasedLine <= lineStartOffsets.count else { return nil }
+        return lineStartOffsets[oneBasedLine - 1]
+    }
+
     private func removeErrorAttributes(in range: NSRange, storage: NSTextStorage) {
         guard let clampedRange = range.clamped(to: storage.length) else { return }
         storage.removeAttribute(.underlineStyle, range: clampedRange)
@@ -37,24 +43,7 @@ extension CodeTextView {
     }
 
     private func lineRange(for oneBasedLine: Int, in text: NSString) -> NSRange? {
-        guard oneBasedLine > 0 else {
-            return nil
-        }
-
-        var currentLine = 1
-        var lineStart = 0
-
-        while currentLine < oneBasedLine && lineStart < text.length {
-            let currentRange = text.lineRange(for: NSRange(location: lineStart, length: 0))
-            lineStart = currentRange.upperBound
-            currentLine += 1
-        }
-
-        guard currentLine == oneBasedLine,
-              lineStart < text.length else {
-            return nil
-        }
-
+        guard let lineStart = lineStartOffset(for: oneBasedLine) else { return nil }
         return text.lineRange(for: NSRange(location: lineStart, length: 0))
     }
 }

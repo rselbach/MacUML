@@ -10,6 +10,9 @@ final class CodeTextView: NSTextView {
     var errorLine: Int?
     var previousErrorRange: NSRange?
 
+    // Cached line start offsets for O(log n) line lookups
+    private(set) var lineStartOffsets: [Int] = [0]
+
     override func shouldChangeText(in affectedCharRange: NSRange, replacementString: String?) -> Bool {
         let allowed = super.shouldChangeText(in: affectedCharRange, replacementString: replacementString)
         guard allowed else {
@@ -33,8 +36,23 @@ final class CodeTextView: NSTextView {
 
     override func didChangeText() {
         super.didChangeText()
+        rebuildLineStartOffsets()
         queueIncrementalHighlightRange()
         scheduleHighlighting()
+    }
+
+    private func rebuildLineStartOffsets() {
+        let text = string as NSString
+        lineStartOffsets = [0]
+        var location = 0
+        while location < text.length {
+            let lineRange = text.lineRange(for: NSRange(location: location, length: 0))
+            let nextLineStart = NSMaxRange(lineRange)
+            if nextLineStart < text.length {
+                lineStartOffsets.append(nextLineStart)
+            }
+            location = nextLineStart
+        }
     }
 
     private func scheduleHighlighting() {
@@ -54,6 +72,7 @@ final class CodeTextView: NSTextView {
 
     func applyInitialHighlighting() {
         guard let storage = textStorage else { return }
+        rebuildLineStartOffsets()
         pendingHighlightRange = nil
         Task { @MainActor [weak self] in
             await self?.highlighter.highlight(storage)

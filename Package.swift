@@ -11,7 +11,7 @@ let package = Package(
         .executable(name: "MacUML", targets: ["MacUML"])
     ],
     dependencies: [
-        .package(url: "https://github.com/sparkle-project/Sparkle", from: "2.6.0")
+        .package(url: "https://github.com/sparkle-project/Sparkle", exact: "2.6.4")
     ],
     targets: [
         .executableTarget(
