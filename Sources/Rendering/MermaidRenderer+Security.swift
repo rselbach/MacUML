@@ -7,7 +7,7 @@ extension MermaidRenderer: WKNavigationDelegate {
         decidePolicyFor navigationAction: WKNavigationAction,
         decisionHandler: @escaping @MainActor @Sendable (WKNavigationActionPolicy) -> Void
     ) {
-decisionHandler(DiagramSecurityPolicy.navigationPolicy(
+        decisionHandler(DiagramSecurityPolicy.navigationPolicy(
             for: navigationAction.request.url,
             trustedLocalFiles: validator.trustedPreviewFiles
         ))
@@ -24,16 +24,5 @@ decisionHandler(DiagramSecurityPolicy.navigationPolicy(
             logger.error("Navigation failed: \(error.localizedDescription)")
             state = .failure(message: "Failed to load renderer")
         }
-    }
-}
-
-extension MermaidRenderer: WKUIDelegate {
-    func webView(
-        _ webView: WKWebView,
-        createWebViewWith configuration: WKWebViewConfiguration,
-        for navigationAction: WKNavigationAction,
-        windowFeatures: WKWindowFeatures
-    ) -> WKWebView? {
-        nil
     }
 }

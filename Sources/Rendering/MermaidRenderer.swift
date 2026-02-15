@@ -80,7 +80,6 @@ class MermaidRenderer: NSObject, ObservableObject {
             name: "zoomChanged"
         )
         webView.navigationDelegate = self
-        webView.uiDelegate = self
         loadBaseHTML()
         
         webView.copyPNGHandler = { [weak self] in
