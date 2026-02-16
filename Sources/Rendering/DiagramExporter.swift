@@ -44,7 +44,7 @@ enum ExportError: LocalizedError, Equatable {
 @MainActor
 struct DiagramExporter {
     let webView: DiagramWebView
-    private let logger = Logger(subsystem: "com.macuml", category: "exporter")
+    private let logger = Logging.logger(category: "exporter")
 
     func copyAsPNG(padding: CGFloat = 16) async -> Result<Data, ExportError> {
         let config = WKSnapshotConfiguration()

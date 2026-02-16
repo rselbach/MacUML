@@ -34,7 +34,7 @@ class MermaidRenderer: NSObject, ObservableObject {
     internal var lastSource: String = ""
     private var renderTask: Task<Void, Never>?
     private let debounceInterval: Duration = .milliseconds(300)
-    internal let logger = Logger(subsystem: "com.macuml", category: "mermaid")
+    internal let logger = Logging.logger(category: "mermaid")
     internal var mermaidReady = false
     private var pendingSource: String?
     internal let zoomStep: Double = 0.1

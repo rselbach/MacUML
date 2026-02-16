@@ -22,7 +22,7 @@ final class MermaidHighlighter {
     private let arrowColor = NSColor.systemBlue
     private let nodeColor = NSColor.systemOrange
     private let directiveColor = NSColor.systemTeal
-    private let logger = Logger(subsystem: "com.macuml", category: "highlighter")
+    private let logger = Logging.logger(category: "highlighter")
 
     private lazy var keywordPattern: NSRegularExpression? = {
         let pattern = "\\b(" + keywords.joined(separator: "|") + ")\\b"

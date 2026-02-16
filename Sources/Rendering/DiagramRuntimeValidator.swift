@@ -21,12 +21,12 @@ struct DiagramMetrics: Equatable {
 ///
 /// Reports failures to the renderer for user-facing error display.
 @MainActor
-class DiagramRuntimeValidator {
+final class DiagramRuntimeValidator {
     weak var webView: DiagramWebView?
     var trustedPreviewFiles: Set<URL> = []
     var validationTask: Task<Void, Never>?
 
-    private let logger = Logger(subsystem: "com.macuml", category: "DiagramRuntimeValidator")
+    private let logger = Logging.logger(category: "DiagramRuntimeValidator")
     private let validationMaxAttempts: Int = 20
     private let validationInitialDelay: Duration = .milliseconds(50)
     private let validationMaxDelay: Duration = .milliseconds(500)
