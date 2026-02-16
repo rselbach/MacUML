@@ -3,12 +3,50 @@ import Foundation
 import os
 import WebKit
 
+enum ExportError: LocalizedError, Equatable {
+    case snapshotFailed(Error)
+    case imageConversionFailed
+    case svgExtractionFailed(Error)
+    case svgNotFound
+    case noDiagram
+
+    static func == (lhs: ExportError, rhs: ExportError) -> Bool {
+        switch (lhs, rhs) {
+        case (.imageConversionFailed, .imageConversionFailed),
+             (.svgNotFound, .svgNotFound),
+             (.noDiagram, .noDiagram):
+            true
+        case (.snapshotFailed(let l), .snapshotFailed(let r)):
+            l.localizedDescription == r.localizedDescription
+        case (.svgExtractionFailed(let l), .svgExtractionFailed(let r)):
+            l.localizedDescription == r.localizedDescription
+        default:
+            false
+        }
+    }
+
+    var errorDescription: String? {
+        switch self {
+        case .snapshotFailed(let error):
+            "Failed to capture diagram: \(error.localizedDescription)"
+        case .imageConversionFailed:
+            "Failed to convert diagram to PNG format"
+        case .svgExtractionFailed(let error):
+            "Failed to extract SVG: \(error.localizedDescription)"
+        case .svgNotFound:
+            "No SVG diagram found to export"
+        case .noDiagram:
+            "No diagram available to export"
+        }
+    }
+}
+
 @MainActor
 struct DiagramExporter {
     let webView: DiagramWebView
     private let logger = Logger(subsystem: "com.macuml", category: "exporter")
 
-    func copyAsPNG(padding: CGFloat = 16) async -> Data? {
+    func copyAsPNG(padding: CGFloat = 16) async -> Result<Data, ExportError> {
         let config = WKSnapshotConfiguration()
         config.afterScreenUpdates = true
 
@@ -25,19 +63,27 @@ struct DiagramExporter {
 
         do {
             let image = try await webView.takeSnapshot(configuration: config)
-            guard let tiffData = image.tiffRepresentation,
-                  let bitmap = NSBitmapImageRep(data: tiffData),
-                  let pngData = bitmap.representation(using: .png, properties: [:]) else {
-                return nil
+            guard let tiffData = image.tiffRepresentation else {
+                logger.error("PNG export failed: could not create TIFF representation")
+                return .failure(.imageConversionFailed)
             }
-            return pngData
+            guard let bitmap = NSBitmapImageRep(data: tiffData) else {
+                logger.error("PNG export failed: could not create bitmap from TIFF")
+                return .failure(.imageConversionFailed)
+            }
+            guard let pngData = bitmap.representation(using: .png, properties: [:]) else {
+                logger.error("PNG export failed: could not create PNG data")
+                return .failure(.imageConversionFailed)
+            }
+            logger.info("PNG export succeeded")
+            return .success(pngData)
         } catch {
             logger.error("Snapshot failed: \(error.localizedDescription)")
-            return nil
+            return .failure(.snapshotFailed(error))
         }
     }
 
-    func copySVG() async -> String? {
+    func copySVG() async -> Result<String, ExportError> {
         let js = """
             (function() {
                 const svg = document.querySelector('#diagram svg');
@@ -46,10 +92,19 @@ struct DiagramExporter {
             """
         do {
             let result = try await webView.evaluateJavaScript(js)
-            return result as? String
+            guard let svg = result as? String else {
+                logger.error("SVG extraction failed: unexpected type \(type(of: result))")
+                return .failure(.svgExtractionFailed(NSError(domain: "DiagramExporter", code: -1, userInfo: [NSLocalizedDescriptionKey: "Unexpected result type"])))
+            }
+            guard !svg.isEmpty else {
+                logger.error("SVG extraction failed: no SVG element found")
+                return .failure(.svgNotFound)
+            }
+            logger.info("SVG export succeeded")
+            return .success(svg)
         } catch {
             logger.error("SVG extraction failed: \(error.localizedDescription)")
-            return nil
+            return .failure(.svgExtractionFailed(error))
         }
     }
 

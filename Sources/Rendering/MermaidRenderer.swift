@@ -28,6 +28,7 @@ class MermaidRenderer: NSObject, ObservableObject {
             }
         }
     }
+    @Published var lastExportError: String?
     let webView: DiagramWebView
     let validator: DiagramRuntimeValidator
     internal var lastSource: String = ""
@@ -83,26 +84,36 @@ class MermaidRenderer: NSObject, ObservableObject {
         loadBaseHTML()
         
         webView.copyPNGHandler = { [weak self] in
-            guard let self else { return }
             Task { @MainActor [weak self] in
                 guard let self else { return }
                 let exporter = DiagramExporter(webView: self.webView)
-                guard let pngData = await exporter.copyAsPNG() else { return }
-                let pasteboard = NSPasteboard.general
-                pasteboard.clearContents()
-                pasteboard.setData(pngData, forType: .png)
+                let result = await exporter.copyAsPNG()
+                switch result {
+                case .success(let pngData):
+                    let pasteboard = NSPasteboard.general
+                    pasteboard.clearContents()
+                    pasteboard.setData(pngData, forType: .png)
+                    self.lastExportError = nil
+                case .failure(let error):
+                    self.lastExportError = error.errorDescription
+                }
             }
         }
 
         webView.copySVGHandler = { [weak self] in
-            guard let self else { return }
             Task { @MainActor [weak self] in
                 guard let self else { return }
                 let exporter = DiagramExporter(webView: self.webView)
-                guard let svg = await exporter.copySVG() else { return }
-                let pasteboard = NSPasteboard.general
-                pasteboard.clearContents()
-                pasteboard.setString(svg, forType: .string)
+                let result = await exporter.copySVG()
+                switch result {
+                case .success(let svg):
+                    let pasteboard = NSPasteboard.general
+                    pasteboard.clearContents()
+                    pasteboard.setString(svg, forType: .string)
+                    self.lastExportError = nil
+                case .failure(let error):
+                    self.lastExportError = error.errorDescription
+                }
             }
         }
         
@@ -235,7 +246,7 @@ class MermaidRenderer: NSObject, ObservableObject {
             return
         }
 
-let normalizedPreviewURL = DiagramSecurityPolicy.normalizedFileURL(previewURL)
+        let normalizedPreviewURL = DiagramSecurityPolicy.normalizedFileURL(previewURL)
         validator.trustedPreviewFiles = [normalizedPreviewURL]
         webView.loadFileURL(normalizedPreviewURL, allowingReadAccessTo: normalizedPreviewURL.deletingLastPathComponent())
     }

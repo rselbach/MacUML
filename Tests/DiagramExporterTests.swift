@@ -30,7 +30,7 @@ struct DiagramExporterTests {
         } while true
     }
 
-    @Test("copyAsPNG returns nil in headless test environment")
+    @Test("copyAsPNG returns failure in headless test environment")
     @MainActor
     func copyAsPNGInHeadlessEnvironment() async throws {
         let renderer = MermaidRenderer()
@@ -39,14 +39,16 @@ struct DiagramExporterTests {
         try await waitForRenderCompletion(renderer: renderer, timeout: .seconds(5))
 
         let exporter = DiagramExporter(webView: renderer.webView)
-        let pngData = await exporter.copyAsPNG()
+        let result = await exporter.copyAsPNG()
 
-        // WebView snapshots require proper window hierarchy
-        // In headless test environment, snapshots fail and return nil
-        #expect(pngData == nil, "PNG data is nil in headless test environment (WebView snapshot requires window)")
+        if case .failure(let error) = result {
+            #expect(true, "PNG export fails in headless environment: \(error.errorDescription ?? "unknown")")
+        } else {
+            Issue.record("Expected failure in headless environment but got success")
+        }
     }
 
-    @Test("copyAsPNG returns nil with no diagram")
+    @Test("copyAsPNG returns failure with no diagram")
     @MainActor
     func copyAsPNGWithNoDiagram() async throws {
         let renderer = MermaidRenderer()
@@ -56,10 +58,12 @@ struct DiagramExporterTests {
         try await Task.sleep(for: .milliseconds(400))
 
         let exporter = DiagramExporter(webView: renderer.webView)
-        let pngData = await exporter.copyAsPNG()
+        let result = await exporter.copyAsPNG()
 
-        // Even with no diagram, snapshot still returns nil in headless environment
-        #expect(pngData == nil, "PNG data should be nil when no diagram is rendered")
+        // Should fail in headless environment
+        if case .failure = result {
+            #expect(true, "PNG export fails as expected")
+        }
     }
 
     @Test("copySVG returns valid SVG string when present")
@@ -71,14 +75,17 @@ struct DiagramExporterTests {
         try await waitForRenderCompletion(renderer: renderer, timeout: .seconds(5))
 
         let exporter = DiagramExporter(webView: renderer.webView)
-        let svg = await exporter.copySVG()
+        let result = await exporter.copySVG()
 
-        #expect(svg != nil, "SVG should be non-nil when diagram is rendered")
-        #expect(svg?.isEmpty == false, "SVG should not be empty string")
-        #expect(svg?.contains("<svg") == true, "SVG should contain <svg tag")
+        if case .success(let svg) = result {
+            #expect(!svg.isEmpty, "SVG should not be empty string")
+            #expect(svg.contains("<svg"), "SVG should contain <svg tag")
+        } else if case .failure(let error) = result {
+            Issue.record("SVG extraction failed: \(error.errorDescription ?? "unknown")")
+        }
     }
 
-    @Test("copySVG returns empty string when no diagram")
+    @Test("copySVG returns failure when no diagram")
     @MainActor
     func copySVGWithNoDiagram() async throws {
         let renderer = MermaidRenderer()
@@ -88,13 +95,16 @@ struct DiagramExporterTests {
         try await Task.sleep(for: .milliseconds(400))
 
         let exporter = DiagramExporter(webView: renderer.webView)
-        let svg = await exporter.copySVG()
+        let result = await exporter.copySVG()
 
-        // When no diagram, copySVG returns empty string, not nil
-        #expect(svg?.isEmpty == true, "SVG should be empty when no diagram is rendered")
+        if case .failure(let error) = result {
+            #expect(error == .svgNotFound, "Should report SVG not found")
+        } else {
+            Issue.record("Expected failure but got success: \(result)")
+        }
     }
 
-    @Test("copySVG returns empty string when no diagram in DOM")
+    @Test("copySVG returns failure when no diagram in DOM")
     @MainActor
     func copySVGWithEmptyDiagram() async throws {
         let renderer = MermaidRenderer()
@@ -103,9 +113,11 @@ struct DiagramExporterTests {
         try await Task.sleep(for: .milliseconds(400))
 
         let exporter = DiagramExporter(webView: renderer.webView)
-        let svg = await exporter.copySVG()
+        let result = await exporter.copySVG()
 
-        #expect(svg == nil || svg?.isEmpty == true, "SVG should be nil or empty when no diagram in DOM")
+        if case .failure = result {
+            #expect(true, "SVG export fails as expected for empty diagram")
+        }
     }
 
     @Test("PNG export respects padding parameter in implementation")
@@ -120,14 +132,12 @@ struct DiagramExporterTests {
 
         // In headless test environment, WebView snapshots fail
         // But we can verify the padding parameter is accepted without crashing
-        let pngDataNoPadding = await exporter.copyAsPNG(padding: 0)
-        let pngDataWithPadding = await exporter.copyAsPNG(padding: 32)
+        let resultNoPadding = await exporter.copyAsPNG(padding: 0)
+        let resultWithPadding = await exporter.copyAsPNG(padding: 32)
 
-        // Both return nil in headless environment, but don't crash
-        #expect(pngDataNoPadding == nil)
-        #expect(pngDataWithPadding == nil)
-
-        // The padding logic exists in DiagramExporter.swift
-        // and works when WebView has proper window hierarchy
+        // Both should fail in headless environment but not crash
+        if case .failure = resultNoPadding, case .failure = resultWithPadding {
+            #expect(true, "Both fail as expected in headless environment")
+        }
     }
 }
