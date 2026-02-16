@@ -2,9 +2,8 @@ import Foundation
 import WebKit
 
 extension MermaidRenderer {
-    private enum Constants {
-        static let zoomEpsilon: Double = 0.0001
-    }
+    private static let zoomEpsilon: Double = 0.0001
+
     func zoomIn() {
         setZoom(zoomLevel + zoomStep)
     }
@@ -44,24 +43,20 @@ extension MermaidRenderer {
     }
 
     func handleZoomChangedMessage(_ body: Any) {
-        let rawLevel: Double
-
-        if let value = body as? NSNumber {
-            rawLevel = value.doubleValue
-        } else if let value = body as? Double {
-            rawLevel = value
-        } else if let value = body as? String, let parsed = Double(value) {
-            rawLevel = parsed
-        } else {
+        guard let rawLevel = coerceToDouble(body) else {
             logger.error("zoomChanged bridge payload is invalid: \(String(describing: body), privacy: .public)")
             return
         }
 
         let normalized = (clampZoom(rawLevel) * 100).rounded() / 100
-        guard abs(normalized - zoomLevel) >= Constants.zoomEpsilon else {
+        guard abs(normalized - zoomLevel) >= Self.zoomEpsilon else {
             return
         }
 
         zoomLevel = normalized
+    }
+
+    private func coerceToDouble(_ value: Any) -> Double? {
+        (value as? NSNumber)?.doubleValue ?? value as? Double ?? Double(value as? String ?? "")
     }
 }

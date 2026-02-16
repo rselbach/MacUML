@@ -189,9 +189,7 @@ struct EditorView: NSViewRepresentable {
             textView.string = text
             textView.selectedRanges = previousRanges.map { rangeValue in
                 guard let range = rangeValue as? NSRange else { return rangeValue }
-                let clampedLocation = min(range.location, newText.length)
-                let clampedLength = min(range.length, max(0, newText.length - clampedLocation))
-                return NSRange(location: clampedLocation, length: clampedLength) as NSValue
+                return range.safeClamped(to: newText.length) as NSValue
             }
             textView.applyInitialHighlighting()
 

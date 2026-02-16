@@ -30,73 +30,49 @@ extension CodeTextView {
             insertNewlineWithIndent()
             return true
         case KeyCode.home.rawValue:
-            if hasShift {
-                moveToBeginningOfLineAndModifySelection(nil)
-            } else {
-                moveToBeginningOfLine(nil)
-            }
+            performMove(hasShift: hasShift, normal: #selector(moveToBeginningOfLine(_:)), modify: #selector(moveToBeginningOfLineAndModifySelection(_:)))
             return true
         case KeyCode.end.rawValue:
-            if hasShift {
-                moveToEndOfLineAndModifySelection(nil)
-            } else {
-                moveToEndOfLine(nil)
-            }
+            performMove(hasShift: hasShift, normal: #selector(moveToEndOfLine(_:)), modify: #selector(moveToEndOfLineAndModifySelection(_:)))
             return true
         case KeyCode.pageUp.rawValue:
-            if hasShift {
-                pageUpAndModifySelection(nil)
-            } else {
-                pageUp(nil)
-            }
+            performMove(hasShift: hasShift, normal: #selector(pageUp(_:)), modify: #selector(pageUpAndModifySelection(_:)))
             return true
         case KeyCode.pageDown.rawValue:
-            if hasShift {
-                pageDownAndModifySelection(nil)
-            } else {
-                pageDown(nil)
-            }
+            performMove(hasShift: hasShift, normal: #selector(pageDown(_:)), modify: #selector(pageDownAndModifySelection(_:)))
             return true
         case KeyCode.leftArrow.rawValue:
             if flags.contains(.command) {
-                if hasShift {
-                    moveToBeginningOfLineAndModifySelection(nil)
-                } else {
-                    moveToBeginningOfLine(nil)
-                }
+                performMove(hasShift: hasShift, normal: #selector(moveToBeginningOfLine(_:)), modify: #selector(moveToBeginningOfLineAndModifySelection(_:)))
                 return true
             }
         case KeyCode.rightArrow.rawValue:
             if flags.contains(.command) {
-                if hasShift {
-                    moveToEndOfLineAndModifySelection(nil)
-                } else {
-                    moveToEndOfLine(nil)
-                }
+                performMove(hasShift: hasShift, normal: #selector(moveToEndOfLine(_:)), modify: #selector(moveToEndOfLineAndModifySelection(_:)))
                 return true
             }
         case KeyCode.upArrow.rawValue:
             if flags.contains(.command) {
-                if hasShift {
-                    moveToBeginningOfDocumentAndModifySelection(nil)
-                } else {
-                    moveToBeginningOfDocument(nil)
-                }
+                performMove(hasShift: hasShift, normal: #selector(moveToBeginningOfDocument(_:)), modify: #selector(moveToBeginningOfDocumentAndModifySelection(_:)))
                 return true
             }
         case KeyCode.downArrow.rawValue:
             if flags.contains(.command) {
-                if hasShift {
-                    moveToEndOfDocumentAndModifySelection(nil)
-                } else {
-                    moveToEndOfDocument(nil)
-                }
+                performMove(hasShift: hasShift, normal: #selector(moveToEndOfDocument(_:)), modify: #selector(moveToEndOfDocumentAndModifySelection(_:)))
                 return true
             }
         default:
             break
         }
         return false
+    }
+
+    private func performMove(hasShift: Bool, normal: Selector, modify: Selector) {
+        if hasShift {
+            perform(modify, with: nil)
+        } else {
+            perform(normal, with: nil)
+        }
     }
 
     func indentSelection() {
