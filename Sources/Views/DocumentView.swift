@@ -17,25 +17,19 @@ struct DocumentView: View {
     @Binding var document: MermaidDocument
     @StateObject private var renderer = MermaidRenderer()
 
-    // Derived state to prevent unnecessary editor re-renders
     @State private var errorLine: Int?
-    @State private var errorMessage: String?
-    @State private var hasError = false
     @State private var showLargeFileWarning = false
-
-    private var lineCount: Int {
-        document.text.components(separatedBy: .newlines).count
-    }
+    @State private var cachedLineCount: Int = 0
 
     var body: some View {
         HSplitView {
             VStack(spacing: 0) {
                 EditorView(text: $document.text, errorLine: errorLine)
 
-                if hasError, errorMessage != nil, let error = renderer.state.error {
+                if let error = renderer.state.error {
                     ErrorBar(error: error)
                 } else if showLargeFileWarning {
-                    LargeFileWarningBar(lineCount: lineCount)
+                    LargeFileWarningBar(lineCount: cachedLineCount)
                 }
             }
             .frame(minWidth: Constants.editorMinWidth)
@@ -47,24 +41,29 @@ struct DocumentView: View {
         .focusedValue(\.renderer, renderer)
         .onChange(of: document.text) { _, newValue in
             renderer.render(source: newValue)
-            updateLargeFileWarning(lineCount: lineCount)
+            cachedLineCount = countLines(newValue)
+            updateLargeFileWarning()
         }
         .onChange(of: renderer.state.error) { _, newError in
-            // Only update editor-affecting state when error actually changes
-            let newLine = newError?.line
-            let newMessage = newError?.message
-            if errorLine != newLine { errorLine = newLine }
-            if errorMessage != newMessage { errorMessage = newMessage }
-            hasError = newError != nil
+            errorLine = newError?.line
         }
         .onAppear {
+            cachedLineCount = countLines(document.text)
             renderer.render(source: document.text)
-            updateLargeFileWarning(lineCount: lineCount)
+            updateLargeFileWarning()
         }
     }
 
-    private func updateLargeFileWarning(lineCount: Int) {
-        showLargeFileWarning = lineCount >= Constants.largeFileLineThreshold
+    private func countLines(_ text: String) -> Int {
+        var count = 1
+        for char in text where char == "\n" {
+            count += 1
+        }
+        return max(1, count)
+    }
+
+    private func updateLargeFileWarning() {
+        showLargeFileWarning = cachedLineCount >= Constants.largeFileLineThreshold
     }
 }
 

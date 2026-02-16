@@ -10,8 +10,8 @@ final class CodeTextView: NSTextView {
     var errorLine: Int?
     var previousErrorRange: NSRange?
 
-    // Cached line start offsets for O(log n) line lookups
     private(set) var lineStartOffsets: [Int] = [0]
+    private var textHash: Int = 0
 
     override func shouldChangeText(in affectedCharRange: NSRange, replacementString: String?) -> Bool {
         let allowed = super.shouldChangeText(in: affectedCharRange, replacementString: replacementString)
@@ -25,8 +25,8 @@ final class CodeTextView: NSTextView {
                affectedCharRange.location <= currentText.length {
                 let safeLength = min(affectedCharRange.length, currentText.length - affectedCharRange.location)
                 let safeRange = NSRange(location: affectedCharRange.location, length: safeLength)
-                let removedNewlines = newlineCount(in: currentText.substring(with: safeRange))
-                let insertedNewlines = newlineCount(in: replacementString ?? "")
+                let removedNewlines = countNewlines(in: currentText.substring(with: safeRange))
+                let insertedNewlines = countNewlines(in: replacementString ?? "")
                 rulerView.applyLineDelta(insertedNewlines - removedNewlines)
             }
         }
@@ -53,6 +53,11 @@ final class CodeTextView: NSTextView {
             }
             location = nextLineStart
         }
+        textHash = string.hashValue
+    }
+
+    func needsUpdate(for newText: String) -> Bool {
+        newText.hashValue != textHash
     }
 
     private func scheduleHighlighting() {
@@ -108,12 +113,12 @@ final class CodeTextView: NSTextView {
         pendingHighlightRange = range
     }
 
-    private func newlineCount(in value: String) -> Int {
-        value.reduce(into: 0) { count, char in
-            if char == "\n" {
-                count += 1
-            }
+    private func countNewlines(in value: String) -> Int {
+        var count = 0
+        for char in value where char == "\n" {
+            count += 1
         }
+        return count
     }
 
     override func keyDown(with event: NSEvent) {
@@ -178,7 +183,7 @@ struct EditorView: NSViewRepresentable {
             textView.font = settings.editorFont
         }
 
-        if textView.string != text {
+        if textView.needsUpdate(for: text) {
             let previousRanges = textView.selectedRanges
             let newText = text as NSString
             textView.string = text
