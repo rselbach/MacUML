@@ -2,12 +2,24 @@ import Foundation
 import WebKit
 import os
 
-struct DiagramMetrics {
+/// Metrics describing the current diagram state in the WebView.
+struct DiagramMetrics: Equatable {
+    /// Whether an SVG element exists in the diagram container.
     let hasSVG: Bool
+    /// Width of the SVG element in points.
     let width: Double
+    /// Height of the SVG element in points.
     let height: Double
 }
 
+/// Validates that the Mermaid.js runtime is properly initialized in the WebView.
+///
+/// Performs exponential backoff validation to detect when:
+/// - Mermaid.js library is loaded
+/// - renderDiagram function is available
+/// - Theme and zoom setters are ready
+///
+/// Reports failures to the renderer for user-facing error display.
 @MainActor
 class DiagramRuntimeValidator {
     weak var webView: DiagramWebView?

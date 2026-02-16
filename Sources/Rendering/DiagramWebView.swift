@@ -1,8 +1,15 @@
 import WebKit
 import AppKit
 
+/// A WKWebView subclass customized for diagram display with custom context menu.
+///
+/// Provides PNG and SVG export handlers via the context menu,
+/// allowing users to copy diagram images to the clipboard.
+@MainActor
 class DiagramWebView: WKWebView {
+    /// Handler called when user selects "Copy as PNG" from context menu.
     var copyPNGHandler: (() -> Void)?
+    /// Handler called when user selects "Copy as SVG" from context menu.
     var copySVGHandler: (() -> Void)?
     
     override func willOpenMenu(_ menu: NSMenu, with event: NSEvent) {
