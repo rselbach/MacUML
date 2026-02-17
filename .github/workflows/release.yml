@@ -218,7 +218,11 @@ jobs:
           SIGN_UPDATE=".build/artifacts/sparkle/Sparkle/bin/sign_update"
           chmod +x "${SIGN_UPDATE}"
 
-          SIGNATURE=$("${SIGN_UPDATE}" ".build/dmg/MacUML-${APP_VERSION}.dmg" --ed-key-file <(echo -n "${SPARKLE_EDDSA_PRIVATE_KEY}"))
+          KEY_FILE="$(mktemp)"
+          printf '%s' "${SPARKLE_EDDSA_PRIVATE_KEY}" > "${KEY_FILE}"
+
+          SIGNATURE=$("${SIGN_UPDATE}" ".build/dmg/MacUML-${APP_VERSION}.dmg" --ed-key-file "${KEY_FILE}")
+          rm -f "${KEY_FILE}"
           echo "SPARKLE_SIGNATURE=${SIGNATURE}" >> "$GITHUB_ENV"
 
       - name: Generate appcast
