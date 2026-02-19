@@ -6,6 +6,7 @@ final class CodeTextView: NSTextView {
     private static let highlightDebounceInterval: TimeInterval = 0.1
     private let highlighter = MermaidHighlighter.shared
     private var highlightWorkItem: DispatchWorkItem?
+    private var highlightTask: Task<Void, Never>?
     private var pendingHighlightRange: NSRange?
     var errorLine: Int?
     var previousErrorRange: NSRange?
@@ -73,8 +74,11 @@ final class CodeTextView: NSTextView {
             guard let self, let storage = self.textStorage else { return }
             let range = self.pendingHighlightRange
             self.pendingHighlightRange = nil
-            Task { @MainActor [weak self] in
+            
+            self.highlightTask?.cancel()
+            self.highlightTask = Task { @MainActor [weak self] in
                 await self?.highlighter.highlight(storage, in: range)
+                guard !Task.isCancelled else { return }
                 self?.applyErrorHighlighting()
             }
         }
@@ -86,8 +90,10 @@ final class CodeTextView: NSTextView {
         guard let storage = textStorage else { return }
         rebuildLineStartOffsets()
         pendingHighlightRange = nil
-        Task { @MainActor [weak self] in
+        highlightTask?.cancel()
+        highlightTask = Task { @MainActor [weak self] in
             await self?.highlighter.highlight(storage)
+            guard !Task.isCancelled else { return }
             self?.applyErrorHighlighting()
         }
     }

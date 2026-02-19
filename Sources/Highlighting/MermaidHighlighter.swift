@@ -92,14 +92,33 @@ final class MermaidHighlighter {
             )
         }.value
 
+        guard !Task.isCancelled else { return }
+
+        // Chunk application of attributes to avoid blocking the main thread for large files
+        let chunkSize = 500
+        var i = 0
+        
         textStorage.beginEditing()
-        textStorage.removeAttribute(.foregroundColor, range: targetRange)
-        textStorage.addAttribute(.foregroundColor, value: NSColor.textColor, range: targetRange)
+        // If text length changed drastically (e.g. user pasted), targetRange might be out of bounds. 
+        // We clamp it safely.
+        let safeTargetRange = targetRange.clamped(to: textStorage.length) ?? NSRange(location: 0, length: textStorage.length)
+        textStorage.removeAttribute(.foregroundColor, range: safeTargetRange)
+        textStorage.addAttribute(.foregroundColor, value: NSColor.textColor, range: safeTargetRange)
 
         for match in matches {
-            textStorage.addAttribute(.foregroundColor, value: match.color, range: match.range)
+            guard !Task.isCancelled else { break }
+            if let safeMatchRange = match.range.clamped(to: textStorage.length) {
+                textStorage.addAttribute(.foregroundColor, value: match.color, range: safeMatchRange)
+            }
+            
+            i += 1
+            if i % chunkSize == 0 {
+                textStorage.endEditing()
+                await Task.yield()
+                textStorage.beginEditing()
+            }
         }
-
+        
         textStorage.endEditing()
     }
 
