@@ -194,7 +194,7 @@ class MermaidRenderer: NSObject, ObservableObject {
                     guard metrics.hasSVG else {
                         let message = "Render reported success, but no SVG was found in preview."
                         logger.error("\(message, privacy: .public)")
-                        state = .failure(message: message)
+                        state = .failure(error: MermaidError(message: message, line: nil))
                         return
                     }
                     
@@ -202,7 +202,7 @@ class MermaidRenderer: NSObject, ObservableObject {
                     if viewHasSize && (metrics.width <= 1 || metrics.height <= 1) {
                         let message = "Rendered SVG has invalid size (\(metrics.width)x\(metrics.height))."
                         logger.error("\(message, privacy: .public)")
-                        state = .failure(message: message)
+                        state = .failure(error: MermaidError(message: message, line: nil))
                         return
                     }
                 }
@@ -212,18 +212,18 @@ class MermaidRenderer: NSObject, ObservableObject {
             } else if let error = dict["error"] as? String {
                 logger.info("Render failed: \(error)")
                 let line = dict["line"] as? Int
-                state = .failure(message: error, line: line)
+                state = .failure(error: MermaidError(message: error, line: line))
             } else {
                 let fallbackError = "Failed to render diagram"
                 logger.error("\(fallbackError, privacy: .public)")
-                state = .failure(message: fallbackError)
+                state = .failure(error: MermaidError(message: fallbackError, line: nil))
             }
 
             await validator.auditDOM(context: "post-render")
         } catch {
             if !Task.isCancelled {
                 logger.error("Render failed: \(error.localizedDescription)")
-                state = .failure(message: error.localizedDescription)
+                state = .failure(error: MermaidError(message: error.localizedDescription, line: nil))
                 await validator.auditDOM(context: "render-error")
             }
         }
@@ -236,7 +236,7 @@ class MermaidRenderer: NSObject, ObservableObject {
     private func loadBaseHTML() {
         guard let previewURL = Bundle.appResource(name: "preview", extension: "html") else {
             logger.error("Failed to find bundled preview.html")
-            state = .failure(message: "Missing preview renderer resource")
+            state = .failure(error: MermaidError(message: "Missing preview renderer resource", line: nil))
             return
         }
 
@@ -270,6 +270,6 @@ class MermaidRenderer: NSObject, ObservableObject {
     }
 
     private func handleValidatorFailure(message: String) {
-        state = .failure(message: message)
+        state = .failure(error: MermaidError(message: message, line: nil))
     }
 }

@@ -33,9 +33,9 @@ struct PreviewPane: View {
                 case .rendering, .ready:
                     MermaidWebView(renderer: renderer)
 
-                case .failure(let message, _):
+                case .failure(error: let error):
                     MermaidWebView(renderer: renderer)
-                    Text(message)
+                    Text(error.message)
                         .font(.caption)
                         .foregroundStyle(.white)
                         .padding(.horizontal, Constants.errorMessageHorizontalPadding)

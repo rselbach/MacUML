@@ -22,7 +22,7 @@ extension MermaidRenderer: WKNavigationDelegate {
     nonisolated func webView(_ webView: WKWebView, didFail navigation: WKNavigation!, withError error: Error) {
         Task { @MainActor in
             logger.error("Navigation failed: \(error.localizedDescription)")
-            state = .failure(message: "Failed to load renderer")
+            state = .failure(error: MermaidError(message: "Failed to load renderer", line: nil))
         }
     }
 }

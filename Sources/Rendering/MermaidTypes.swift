@@ -8,23 +8,30 @@ enum MermaidRenderState: Equatable {
     case rendering
     /// Rendering completed successfully.
     case ready
-    /// Rendering failed with an error message and optional line number.
-    case failure(message: String, line: Int? = nil)
+    /// Rendering failed with an error.
+    case failure(error: MermaidError)
     
     var error: MermaidError? {
-        if case .failure(let message, let line) = self {
-            return MermaidError(message: message, line: line)
+        if case .failure(let error) = self {
+            return error
         }
         return nil
     }
 }
 
 /// An error from Mermaid.js diagram parsing or rendering.
-struct MermaidError: Equatable {
+struct MermaidError: Equatable, LocalizedError {
     /// Human-readable error description.
     let message: String
     /// Line number where the error occurred, if available.
     let line: Int?
+
+    var errorDescription: String? {
+        if let line {
+            return "Line \(line): \(message)"
+        }
+        return message
+    }
 }
 
 /// Available Mermaid.js diagram themes.

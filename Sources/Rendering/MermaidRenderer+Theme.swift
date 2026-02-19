@@ -13,7 +13,7 @@ extension MermaidRenderer {
                 )
             } catch {
                 self.logger.error("Failed to apply preview theme '\(self.theme.rawValue, privacy: .public)': \(error.localizedDescription, privacy: .public)")
-                self.state = .failure(message: "Failed to apply theme '\(self.theme.rawValue)': \(error.localizedDescription)")
+                self.state = .failure(error: MermaidError(message: "Failed to apply theme '\(self.theme.rawValue)': \(error.localizedDescription)", line: nil))
             }
         }
     }
