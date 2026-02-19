@@ -92,16 +92,34 @@ struct DiagramExporter {
             """
         do {
             let result = try await webView.evaluateJavaScript(js)
-            guard let svg = result as? String else {
+            guard let rawSvg = result as? String else {
                 logger.error("SVG extraction failed: unexpected type \(type(of: result))")
                 return .failure(.svgExtractionFailed(NSError(domain: "DiagramExporter", code: -1, userInfo: [NSLocalizedDescriptionKey: "Unexpected result type"])))
             }
-            guard !svg.isEmpty else {
+            guard !rawSvg.isEmpty else {
                 logger.error("SVG extraction failed: no SVG element found")
                 return .failure(.svgNotFound)
             }
+            
+            // Defense-in-depth: strip `<script>` tags and `on*` attributes from exported SVG
+            var sanitizedSvg = rawSvg.replacingOccurrences(
+                of: "(?is)<script\\b[^>]*>.*?</script>",
+                with: "",
+                options: .regularExpression
+            )
+            sanitizedSvg = sanitizedSvg.replacingOccurrences(
+                of: "(?i)\\bon[a-z]+\\s*=\\s*\"[^\"]*\"",
+                with: "",
+                options: .regularExpression
+            )
+            sanitizedSvg = sanitizedSvg.replacingOccurrences(
+                of: "(?i)\\bon[a-z]+\\s*=\\s*'[^']*'",
+                with: "",
+                options: .regularExpression
+            )
+            
             logger.info("SVG export succeeded")
-            return .success(svg)
+            return .success(sanitizedSvg)
         } catch {
             logger.error("SVG extraction failed: \(error.localizedDescription)")
             return .failure(.svgExtractionFailed(error))
