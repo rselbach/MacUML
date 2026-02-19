@@ -41,34 +41,11 @@ struct MermaidDocument: FileDocument {
         return .init(regularFileWithContents: data)
     }
 
-    private static let defaultContent = """
-sequenceDiagram
-    participant Jeff
-    participant Abed
-    participant StarBurns
-    participant Dean
-    participant StudyGroup as Study Group
-
-    Jeff->>Abed: We need chicken fingers
-    Abed->>Abed: Becomes fry cook
-    Note over Abed: Controls the supply
-    
-    Abed->>StarBurns: You handle distribution
-    StarBurns->>StudyGroup: Chicken fingers... for a price
-    StudyGroup->>StarBurns: Bribes & favors
-    StarBurns->>Abed: Reports tribute
-    
-    Jeff->>Abed: I need extra fingers for a date
-    Abed-->>Jeff: You'll wait like everyone else
-    Jeff->>Jeff: What have we created?
-    
-    Dean->>Abed: Why is everyone so happy?
-    Abed-->>Dean: Efficient cafeteria management
-    Dean->>Dean: Something's not right...
-    
-    StudyGroup->>Jeff: This has gone too far
-    Jeff->>Abed: We have to shut it down
-    Abed->>Abed: Destroys the fryer
-    Note over Abed: The empire crumbles
-"""
+    private static let defaultContent: String = {
+        guard let url = Bundle.appResource(name: "DefaultDiagram", extension: "mmd"),
+              let content = try? String(contentsOf: url, encoding: .utf8) else {
+            return "sequenceDiagram\n    A->>B: Hello"
+        }
+        return content
+    }()
 }

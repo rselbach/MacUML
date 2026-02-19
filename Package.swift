@@ -26,7 +26,8 @@ let package = Package(
                 .copy("Resources/mermaid.min.js"),
                 .copy("Resources/preview.html"),
                 .copy("Resources/preview.js"),
-                .copy("Resources/preview.css")
+                .copy("Resources/preview.css"),
+                .copy("Resources/DefaultDiagram.mmd")
             ]
         ),
         .testTarget(

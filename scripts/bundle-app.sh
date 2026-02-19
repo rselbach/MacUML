@@ -94,6 +94,8 @@ create_bundle() {
      "${contents}/Resources/preview.js"
   cp "${PROJECT_ROOT}/Sources/Resources/preview.css" \
      "${contents}/Resources/preview.css"
+  cp "${PROJECT_ROOT}/Sources/Resources/DefaultDiagram.mmd" \
+     "${contents}/Resources/DefaultDiagram.mmd"
 
   local sparkle
   sparkle="$(find_sparkle "${bin_path}" "${arch}" "${config}")"
