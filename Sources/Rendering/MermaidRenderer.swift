@@ -178,41 +178,45 @@ class MermaidRenderer: NSObject, ObservableObject {
             
             guard !Task.isCancelled else { return }
             
-            if let dict = result as? [String: Any],
-               let success = dict["success"] as? Bool {
-                if success {
-                    if let stale = dict["stale"] as? Bool, stale {
-                        logger.debug("Dropping stale render result")
+            guard let dict = result as? [String: Any], let success = dict["success"] as? Bool else {
+                state = .ready
+                await validator.auditDOM(context: "post-render")
+                return
+            }
+
+            if success {
+                if dict["stale"] as? Bool == true {
+                    logger.debug("Dropping stale render result")
+                    return
+                }
+                
+                if let metrics = await validator.fetchMetrics() {
+                    guard metrics.hasSVG else {
+                        let message = "Render reported success, but no SVG was found in preview."
+                        logger.error("\(message, privacy: .public)")
+                        state = .failure(message: message)
                         return
                     }
-                    if let metrics = await validator.fetchMetrics() {
-                        if !metrics.hasSVG {
-                            let message = "Render reported success, but no SVG was found in preview."
-                            logger.error("\(message, privacy: .public)")
-                            state = .failure(message: message)
-                            return
-                        }
-                        let viewHasSize = webView.bounds.width > 1 && webView.bounds.height > 1
-                        if viewHasSize && (metrics.width <= 1 || metrics.height <= 1) {
-                            let message = "Rendered SVG has invalid size (\(metrics.width)x\(metrics.height))."
-                            logger.error("\(message, privacy: .public)")
-                            state = .failure(message: message)
-                            return
-                        }
+                    
+                    let viewHasSize = webView.bounds.width > 1 && webView.bounds.height > 1
+                    if viewHasSize && (metrics.width <= 1 || metrics.height <= 1) {
+                        let message = "Rendered SVG has invalid size (\(metrics.width)x\(metrics.height))."
+                        logger.error("\(message, privacy: .public)")
+                        state = .failure(message: message)
+                        return
                     }
-                    logger.info("Render succeeded")
-                    state = .ready
-                } else if let error = dict["error"] as? String {
-                    logger.info("Render failed: \(error)")
-                    let line = dict["line"] as? Int
-                    state = .failure(message: error, line: line)
-                } else {
-                    let fallbackError = "Failed to render diagram"
-                    logger.error("\(fallbackError, privacy: .public)")
-                    state = .failure(message: fallbackError)
                 }
-            } else {
+                
+                logger.info("Render succeeded")
                 state = .ready
+            } else if let error = dict["error"] as? String {
+                logger.info("Render failed: \(error)")
+                let line = dict["line"] as? Int
+                state = .failure(message: error, line: line)
+            } else {
+                let fallbackError = "Failed to render diagram"
+                logger.error("\(fallbackError, privacy: .public)")
+                state = .failure(message: fallbackError)
             }
 
             await validator.auditDOM(context: "post-render")
