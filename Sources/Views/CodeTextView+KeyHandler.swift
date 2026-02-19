@@ -82,8 +82,6 @@ extension CodeTextView {
                 performMove(hasShift: hasShift, normal: #selector(moveToEndOfDocument(_:)), modify: #selector(moveToEndOfDocumentAndModifySelection(_:)))
                 return true
             }
-        default:
-            break
         }
         return false
     }
