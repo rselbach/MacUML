@@ -24,7 +24,7 @@ struct DocumentView: View {
     var body: some View {
         HSplitView {
             VStack(spacing: 0) {
-                EditorView(text: $document.text, errorLine: errorLine)
+                EditorView(text: $document.text, lineCount: $cachedLineCount, errorLine: errorLine)
 
                 if let error = renderer.state.error {
                     ErrorBar(error: error)
@@ -41,21 +41,15 @@ struct DocumentView: View {
         .focusedValue(\.renderer, renderer)
         .onChange(of: document.text) { _, newValue in
             renderer.render(source: newValue)
-            cachedLineCount = countLines(newValue)
             updateLargeFileWarning()
         }
         .onChange(of: renderer.state.error) { _, newError in
             errorLine = newError?.line
         }
         .onAppear {
-            cachedLineCount = countLines(document.text)
             renderer.render(source: document.text)
             updateLargeFileWarning()
         }
-    }
-
-    private func countLines(_ text: String) -> Int {
-        max(1, text.filter { $0 == "\n" }.count + 1)
     }
 
     private func updateLargeFileWarning() {

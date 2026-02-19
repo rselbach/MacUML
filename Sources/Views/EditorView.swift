@@ -134,6 +134,7 @@ final class CodeTextView: NSTextView {
 
 struct EditorView: NSViewRepresentable {
     @Binding var text: String
+    @Binding var lineCount: Int
     var errorLine: Int?
 
     func makeNSView(context: Context) -> NSScrollView {
@@ -215,19 +216,22 @@ struct EditorView: NSViewRepresentable {
     }
 
     func makeCoordinator() -> Coordinator {
-        Coordinator(text: $text)
+        Coordinator(text: $text, lineCount: $lineCount)
     }
 
     class Coordinator: NSObject, NSTextViewDelegate {
         var text: Binding<String>
+        var lineCount: Binding<Int>
 
-        init(text: Binding<String>) {
+        init(text: Binding<String>, lineCount: Binding<Int>) {
             self.text = text
+            self.lineCount = lineCount
         }
 
         func textDidChange(_ notification: Notification) {
-            guard let textView = notification.object as? NSTextView else { return }
+            guard let textView = notification.object as? CodeTextView else { return }
             text.wrappedValue = textView.string
+            lineCount.wrappedValue = textView.lineStartOffsets.count
         }
     }
 }
