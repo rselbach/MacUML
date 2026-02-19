@@ -114,11 +114,7 @@ final class CodeTextView: NSTextView {
     }
 
     private func countNewlines(in value: String) -> Int {
-        var count = 0
-        for char in value where char == "\n" {
-            count += 1
-        }
-        return count
+        value.filter { $0 == "\n" }.count
     }
 
     override func keyDown(with event: NSEvent) {
@@ -187,9 +183,8 @@ struct EditorView: NSViewRepresentable {
             let previousRanges = textView.selectedRanges
             let newText = text as NSString
             textView.string = text
-            textView.selectedRanges = previousRanges.map { rangeValue in
-                guard let range = rangeValue as? NSRange else { return rangeValue }
-                return range.safeClamped(to: newText.length) as NSValue
+            textView.selectedRanges = previousRanges.map { 
+                $0.rangeValue.safeClamped(to: newText.length) as NSValue 
             }
             textView.applyInitialHighlighting()
 

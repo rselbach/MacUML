@@ -55,11 +55,7 @@ struct DocumentView: View {
     }
 
     private func countLines(_ text: String) -> Int {
-        var count = 1
-        for char in text where char == "\n" {
-            count += 1
-        }
-        return max(1, count)
+        max(1, text.filter { $0 == "\n" }.count + 1)
     }
 
     private func updateLargeFileWarning() {
