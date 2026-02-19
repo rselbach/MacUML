@@ -114,9 +114,13 @@ extension CodeTextView {
         let finalText = lineRange.upperBound < text.length ? indented + "\n" : indented
 
         if shouldChangeText(in: lineRange, replacementString: finalText) {
-            replaceCharacters(in: lineRange, with: finalText)
+            undoManager?.beginUndoGrouping()
+            textStorage?.beginEditing()
+            textStorage?.replaceCharacters(in: lineRange, with: finalText)
+            textStorage?.endEditing()
             didChangeText()
-            setSelectedRange(NSRange(location: lineRange.location, length: finalText.count))
+            undoManager?.endUndoGrouping()
+            setSelectedRange(NSRange(location: lineRange.location, length: (finalText as NSString).length))
         }
     }
 
@@ -133,9 +137,13 @@ extension CodeTextView {
         let finalText = lineRange.upperBound < text.length ? unindented + "\n" : unindented
 
         if shouldChangeText(in: lineRange, replacementString: finalText) {
-            replaceCharacters(in: lineRange, with: finalText)
+            undoManager?.beginUndoGrouping()
+            textStorage?.beginEditing()
+            textStorage?.replaceCharacters(in: lineRange, with: finalText)
+            textStorage?.endEditing()
             didChangeText()
-            setSelectedRange(NSRange(location: lineRange.location, length: finalText.count))
+            undoManager?.endUndoGrouping()
+            setSelectedRange(NSRange(location: lineRange.location, length: (finalText as NSString).length))
         }
     }
 
