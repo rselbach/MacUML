@@ -24,7 +24,9 @@ let package = Package(
             resources: [
                 .copy("Resources/AppIcon.icns"),
                 .copy("Resources/mermaid.min.js"),
-                .copy("Resources/preview.html")
+                .copy("Resources/preview.html"),
+                .copy("Resources/preview.js"),
+                .copy("Resources/preview.css")
             ]
         ),
         .testTarget(

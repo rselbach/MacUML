@@ -90,6 +90,10 @@ create_bundle() {
      "${contents}/Resources/mermaid.min.js"
   cp "${PROJECT_ROOT}/Sources/Resources/preview.html" \
      "${contents}/Resources/preview.html"
+  cp "${PROJECT_ROOT}/Sources/Resources/preview.js" \
+     "${contents}/Resources/preview.js"
+  cp "${PROJECT_ROOT}/Sources/Resources/preview.css" \
+     "${contents}/Resources/preview.css"
 
   local sparkle
   sparkle="$(find_sparkle "${bin_path}" "${arch}" "${config}")"
