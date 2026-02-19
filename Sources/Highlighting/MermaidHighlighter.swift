@@ -36,8 +36,6 @@ final class MermaidHighlighter {
     }()
 
     private lazy var patterns: [(NSRegularExpression, NSColor)] = {
-        var result: [(NSRegularExpression, NSColor)] = []
-
         let patternDefs: [(String, NSColor)] = [
             ("%%[^\\n]*", commentColor),
             ("\"[^\"\\n]*\"", stringColor),
@@ -54,15 +52,14 @@ final class MermaidHighlighter {
             ("%%\\{.+\\}%%", directiveColor),
         ]
 
-        for (pattern, color) in patternDefs {
+        return patternDefs.compactMap { pattern, color in
             do {
-                let regex = try NSRegularExpression(pattern: pattern, options: [])
-                result.append((regex, color))
+                return (try NSRegularExpression(pattern: pattern, options: []), color)
             } catch {
                 logger.error("Failed to compile Mermaid highlighting regex '\(pattern, privacy: .public)': \(error.localizedDescription, privacy: .public)")
+                return nil
             }
         }
-        return result
     }()
 
     func highlight(_ textStorage: NSTextStorage, in editedRange: NSRange? = nil) async {
