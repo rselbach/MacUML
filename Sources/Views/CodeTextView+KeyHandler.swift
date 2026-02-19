@@ -1,62 +1,83 @@
 import AppKit
+import Carbon.HIToolbox.Events
 
 extension CodeTextView {
     private enum KeyCode: UInt16 {
-        case tab = 48
-        case returnKey = 36
-        case home = 115
-        case end = 119
-        case pageUp = 116
-        case pageDown = 121
-        case leftArrow = 123
-        case rightArrow = 124
-        case upArrow = 126
-        case downArrow = 125
+        case tab
+        case returnKey
+        case home
+        case end
+        case pageUp
+        case pageDown
+        case leftArrow
+        case rightArrow
+        case upArrow
+        case downArrow
+
+        init?(rawValue: UInt16) {
+            switch Int(rawValue) {
+            case kVK_Tab: self = .tab
+            case kVK_Return: self = .returnKey
+            case kVK_Home: self = .home
+            case kVK_End: self = .end
+            case kVK_PageUp: self = .pageUp
+            case kVK_PageDown: self = .pageDown
+            case kVK_LeftArrow: self = .leftArrow
+            case kVK_RightArrow: self = .rightArrow
+            case kVK_UpArrow: self = .upArrow
+            case kVK_DownArrow: self = .downArrow
+            default: return nil
+            }
+        }
     }
 
     func handleKeyDown(_ event: NSEvent) -> Bool {
         let flags = event.modifierFlags.intersection(.deviceIndependentFlagsMask)
         let hasShift = flags.contains(.shift)
 
-        switch event.keyCode {
-        case KeyCode.tab.rawValue:
+        guard let keyCode = KeyCode(rawValue: event.keyCode) else {
+            return false
+        }
+
+        switch keyCode {
+        case .tab:
             if hasShift {
                 unindentSelection()
             } else {
                 indentSelection()
             }
             return true
-        case KeyCode.returnKey.rawValue:
+        case .returnKey:
             insertNewlineWithIndent()
             return true
-        case KeyCode.home.rawValue:
+        case .home:
             performMove(hasShift: hasShift, normal: #selector(moveToBeginningOfLine(_:)), modify: #selector(moveToBeginningOfLineAndModifySelection(_:)))
             return true
-        case KeyCode.end.rawValue:
+        case .end:
             performMove(hasShift: hasShift, normal: #selector(moveToEndOfLine(_:)), modify: #selector(moveToEndOfLineAndModifySelection(_:)))
             return true
-        case KeyCode.pageUp.rawValue:
+        case .pageUp:
             performMove(hasShift: hasShift, normal: #selector(pageUp(_:)), modify: #selector(pageUpAndModifySelection(_:)))
             return true
-        case KeyCode.pageDown.rawValue:
+        case .pageDown:
             performMove(hasShift: hasShift, normal: #selector(pageDown(_:)), modify: #selector(pageDownAndModifySelection(_:)))
             return true
-        case KeyCode.leftArrow.rawValue:
-            if flags.contains(.command) {
-                performMove(hasShift: hasShift, normal: #selector(moveToBeginningOfLine(_:)), modify: #selector(moveToBeginningOfLineAndModifySelection(_:)))
+        case .leftArrow:
+            if flags.contains(.option) {
+                performMove(hasShift: hasShift, normal: #selector(moveWordBackward(_:)), modify: #selector(moveWordBackwardAndModifySelection(_:)))
                 return true
             }
-        case KeyCode.rightArrow.rawValue:
-            if flags.contains(.command) {
-                performMove(hasShift: hasShift, normal: #selector(moveToEndOfLine(_:)), modify: #selector(moveToEndOfLineAndModifySelection(_:)))
+        case .rightArrow:
+            if flags.contains(.option) {
+                performMove(hasShift: hasShift, normal: #selector(moveWordForward(_:)), modify: #selector(moveWordForwardAndModifySelection(_:)))
                 return true
             }
-        case KeyCode.upArrow.rawValue:
-            if flags.contains(.command) {
-                performMove(hasShift: hasShift, normal: #selector(moveToBeginningOfDocument(_:)), modify: #selector(moveToBeginningOfDocumentAndModifySelection(_:)))
+        case .upArrow:
+            if flags.contains(.option) {
+                performMove(hasShift: hasShift, normal: #selector(moveToBeginningOfParagraph(_:)), modify: #selector(moveToBeginningOfParagraphAndModifySelection(_:)))
                 return true
             }
-        case KeyCode.downArrow.rawValue:
+        case .downArrow:
             if flags.contains(.command) {
                 performMove(hasShift: hasShift, normal: #selector(moveToEndOfDocument(_:)), modify: #selector(moveToEndOfDocumentAndModifySelection(_:)))
                 return true
