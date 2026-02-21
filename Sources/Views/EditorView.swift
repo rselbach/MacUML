@@ -37,15 +37,18 @@ final class CodeTextView: NSTextView {
 
     override func didChangeText() {
         super.didChangeText()
-        rebuildLineStartOffsets()
+        let currentString = string
+        if let storage = textStorage {
+            updateLineStartOffsetsIncrementally(using: storage, currentString: currentString)
+        } else {
+            rebuildLineStartOffsets(for: currentString)
+        }
+        textHash = currentString.hashValue
         queueIncrementalHighlightRange()
         scheduleHighlighting()
     }
 
-    private func rebuildLineStartOffsets() {
-        let currentString = string
-        textHash = currentString.hashValue
-
+    private func rebuildLineStartOffsets(for currentString: String) {
         // O(N) iteration over UTF-16 code units is ~100x faster than calling NSString.lineRange in a while loop
         var offsets = [0]
         let utf16 = currentString.utf16
@@ -62,6 +65,134 @@ final class CodeTextView: NSTextView {
             }
         }
         lineStartOffsets = offsets
+    }
+
+    private func updateLineStartOffsetsIncrementally(using storage: NSTextStorage, currentString: String) {
+        guard !lineStartOffsets.isEmpty else {
+            rebuildLineStartOffsets(for: currentString)
+            return
+        }
+
+        let editedRange = storage.editedRange
+        guard editedRange.location != NSNotFound,
+              editedRange.location <= storage.length else {
+            rebuildLineStartOffsets(for: currentString)
+            return
+        }
+
+        let changeInLength = storage.changeInLength
+        let newEditedLength = editedRange.length
+        let oldEditedLength = newEditedLength - changeInLength
+        guard oldEditedLength >= 0 else {
+            rebuildLineStartOffsets(for: currentString)
+            return
+        }
+
+        let previousTextLength = storage.length - changeInLength
+        guard previousTextLength >= 0 else {
+            rebuildLineStartOffsets(for: currentString)
+            return
+        }
+
+        let oldEditEnd = editedRange.location + oldEditedLength
+        guard oldEditEnd <= previousTextLength else {
+            rebuildLineStartOffsets(for: currentString)
+            return
+        }
+
+        let newTextLength = storage.length
+        let safeLocation = min(editedRange.location, newTextLength)
+
+        let startIndex = lineIndex(atOrBefore: safeLocation)
+        let recalcStart = lineStartOffsets[startIndex]
+
+        let suffixStartIndex = firstLineIndex(greaterThan: oldEditEnd)
+        let oldRecalcEnd = suffixStartIndex < lineStartOffsets.count
+            ? lineStartOffsets[suffixStartIndex]
+            : previousTextLength
+
+        let newRecalcEnd = max(recalcStart, min(newTextLength, oldRecalcEnd + changeInLength))
+
+        var updatedOffsets = Array(lineStartOffsets.prefix(startIndex + 1))
+        updatedOffsets.append(contentsOf: lineStarts(in: currentString, from: recalcStart, to: newRecalcEnd))
+
+        if suffixStartIndex < lineStartOffsets.count {
+            for offset in lineStartOffsets[suffixStartIndex...] {
+                let shifted = offset + changeInLength
+                if shifted > recalcStart && shifted < newTextLength {
+                    if updatedOffsets.last != shifted {
+                        updatedOffsets.append(shifted)
+                    }
+                }
+            }
+        }
+
+        if updatedOffsets.first != 0 {
+            updatedOffsets.insert(0, at: 0)
+        }
+        lineStartOffsets = updatedOffsets
+    }
+
+    private func lineStarts(in text: String, from start: Int, to end: Int) -> [Int] {
+        guard start < end else {
+            return []
+        }
+
+        let nsText = text as NSString
+        let safeStart = min(max(0, start), nsText.length)
+        let safeEnd = min(max(safeStart, end), nsText.length)
+        guard safeStart < safeEnd else {
+            return []
+        }
+
+        let segment = nsText.substring(with: NSRange(location: safeStart, length: safeEnd - safeStart))
+        let utf16 = segment.utf16
+        let newline: UTF16.CodeUnit = 10
+
+        var starts: [Int] = []
+        starts.reserveCapacity(max(1, utf16.count / 40))
+
+        var offset = safeStart
+        for char in utf16 {
+            offset += 1
+            if char == newline && offset < nsText.length {
+                starts.append(offset)
+            }
+        }
+
+        return starts
+    }
+
+    private func lineIndex(atOrBefore position: Int) -> Int {
+        var low = 0
+        var high = lineStartOffsets.count
+
+        while low < high {
+            let mid = low + (high - low) / 2
+            if lineStartOffsets[mid] <= position {
+                low = mid + 1
+            } else {
+                high = mid
+            }
+        }
+
+        return max(0, low - 1)
+    }
+
+    private func firstLineIndex(greaterThan position: Int) -> Int {
+        var low = 0
+        var high = lineStartOffsets.count
+
+        while low < high {
+            let mid = low + (high - low) / 2
+            if lineStartOffsets[mid] <= position {
+                low = mid + 1
+            } else {
+                high = mid
+            }
+        }
+
+        return low
     }
 
     func needsUpdate(for newText: String) -> Bool {
@@ -88,7 +219,8 @@ final class CodeTextView: NSTextView {
 
     func applyInitialHighlighting() {
         guard let storage = textStorage else { return }
-        rebuildLineStartOffsets()
+        rebuildLineStartOffsets(for: storage.string)
+        textHash = storage.string.hashValue
         pendingHighlightRange = nil
         highlightTask?.cancel()
         highlightTask = Task { @MainActor [weak self] in
