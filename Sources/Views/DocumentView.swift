@@ -11,6 +11,7 @@ private enum Constants {
     static let errorBarVerticalPadding: CGFloat = 4
     static let errorBarBackgroundOpacity: Double = 0.85
     static let largeFileLineThreshold: Int = 5000
+    static let renderDebounceInterval: Duration = .milliseconds(200)
 }
 
 struct DocumentView: View {
@@ -20,6 +21,8 @@ struct DocumentView: View {
     @State private var errorLine: Int?
     @State private var showLargeFileWarning = false
     @State private var cachedLineCount: Int = 0
+    @State private var renderDebounceTask: Task<Void, Never>?
+    @State private var pendingRenderSource: String = ""
 
     var body: some View {
         HSplitView {
@@ -40,20 +43,43 @@ struct DocumentView: View {
         .frame(minWidth: Constants.windowMinWidth, minHeight: Constants.windowMinHeight)
         .focusedValue(\.renderer, renderer)
         .onChange(of: document.text) { _, newValue in
-            renderer.render(source: newValue)
+            pendingRenderSource = newValue
+            scheduleDebouncedRender()
             updateLargeFileWarning()
         }
         .onChange(of: renderer.state.error) { _, newError in
             errorLine = newError?.line
         }
         .onAppear {
+            pendingRenderSource = document.text
             renderer.render(source: document.text)
             updateLargeFileWarning()
+        }
+        .onDisappear {
+            renderDebounceTask?.cancel()
+            renderDebounceTask = nil
         }
     }
 
     private func updateLargeFileWarning() {
         showLargeFileWarning = cachedLineCount >= Constants.largeFileLineThreshold
+    }
+
+    private func scheduleDebouncedRender() {
+        renderDebounceTask?.cancel()
+        renderDebounceTask = Task { @MainActor in
+            do {
+                try await Task.sleep(for: Constants.renderDebounceInterval)
+            } catch {
+                return
+            }
+
+            guard !Task.isCancelled else {
+                return
+            }
+
+            renderer.render(source: pendingRenderSource)
+        }
     }
 }
 
