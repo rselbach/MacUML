@@ -17,8 +17,8 @@ struct DiagramExporterTests {
             switch renderer.state {
             case .ready:
                 return
-            case .failure(let message, _):
-                Issue.record("Renderer failed: \(message)")
+            case .failure(let error):
+                Issue.record("Renderer failed: \(error.message)")
                 return
             default:
                 if clock.now >= deadline {

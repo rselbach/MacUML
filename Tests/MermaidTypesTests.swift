@@ -76,10 +76,10 @@ struct MermaidTypesTests {
 
     @Test("Render state failure with line")
     func renderStateFailureWithLine() {
-        let state = MermaidRenderState.failure(message: "Parse error", line: 10)
-        if case .failure(let message, let line) = state {
-            #expect(message == "Parse error")
-            #expect(line == 10)
+        let state = MermaidRenderState.failure(error: MermaidError(message: "Parse error", line: 10))
+        if case .failure(let error) = state {
+            #expect(error.message == "Parse error")
+            #expect(error.line == 10)
         } else {
             Issue.record("Expected failure state")
         }
@@ -87,10 +87,10 @@ struct MermaidTypesTests {
 
     @Test("Render state failure without line")
     func renderStateFailureWithoutLine() {
-        let state = MermaidRenderState.failure(message: "Generic error")
-        if case .failure(let message, let line) = state {
-            #expect(message == "Generic error")
-            #expect(line == nil)
+        let state = MermaidRenderState.failure(error: MermaidError(message: "Generic error", line: nil))
+        if case .failure(let error) = state {
+            #expect(error.message == "Generic error")
+            #expect(error.line == nil)
         } else {
             Issue.record("Expected failure state")
         }
