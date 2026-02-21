@@ -101,22 +101,7 @@ struct DiagramExporter {
                 return .failure(.svgNotFound)
             }
             
-            // Defense-in-depth: strip `<script>` tags and `on*` attributes from exported SVG
-            var sanitizedSvg = rawSvg.replacingOccurrences(
-                of: "(?is)<script\\b[^>]*>.*?</script>",
-                with: "",
-                options: .regularExpression
-            )
-            sanitizedSvg = sanitizedSvg.replacingOccurrences(
-                of: "(?i)\\bon[a-z]+\\s*=\\s*\"[^\"]*\"",
-                with: "",
-                options: .regularExpression
-            )
-            sanitizedSvg = sanitizedSvg.replacingOccurrences(
-                of: "(?i)\\bon[a-z]+\\s*=\\s*'[^']*'",
-                with: "",
-                options: .regularExpression
-            )
+            let sanitizedSvg = try SVGSanitizer.sanitize(rawSvg)
             
             logger.info("SVG export succeeded")
             return .success(sanitizedSvg)
