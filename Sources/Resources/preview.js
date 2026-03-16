@@ -338,7 +338,7 @@ window.renderDiagram = async function(source) {
             updateInteractionState();
             applyPan();
             applyZoom();
-            requestAnimationFrame(() => window.rescaleSVG());
+            window.rescaleSVG();
             cleanupUnexpectedBodyNodes('render-success');
             return { success: true };
         } else {

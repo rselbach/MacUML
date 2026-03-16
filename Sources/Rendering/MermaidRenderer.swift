@@ -190,15 +190,26 @@ class MermaidRenderer: NSObject, ObservableObject {
                     return
                 }
                 
-                if let metrics = await validator.fetchMetrics() {
+                if var metrics = await validator.fetchMetrics() {
                     guard metrics.hasSVG else {
                         let message = "Render reported success, but no SVG was found in preview."
                         logger.error("\(message, privacy: .public)")
                         state = .failure(error: MermaidError(message: message, line: nil))
                         return
                     }
-                    
+
                     let viewHasSize = webView.bounds.width > 1 && webView.bounds.height > 1
+                    if viewHasSize && (metrics.width <= 1 || metrics.height <= 1) {
+                        // Layout may not have settled yet; retry once after a
+                        // brief delay before treating this as a real error.
+                        try? await Task.sleep(for: .milliseconds(100))
+                        guard !Task.isCancelled else { return }
+                        if let retry = await validator.fetchMetrics(),
+                           retry.hasSVG {
+                            metrics = retry
+                        }
+                    }
+
                     if viewHasSize && (metrics.width <= 1 || metrics.height <= 1) {
                         let message = "Rendered SVG has invalid size (\(metrics.width)x\(metrics.height))."
                         logger.error("\(message, privacy: .public)")
