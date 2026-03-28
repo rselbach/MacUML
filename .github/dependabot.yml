@@ -4,10 +4,45 @@ updates:
     directory: "/"
     schedule:
       interval: "weekly"
+      day: "monday"
+      time: "09:00"
     open-pull-requests-limit: 10
+    labels:
+      - "dependencies"
+      - "github-actions"
+    assignees:
+      - "rselbach"
+    commit-message:
+      prefix: "ci"
+      include: "scope"
+    groups:
+      github-actions:
+        patterns:
+          - "*"
+        update-types:
+          - "minor"
+          - "patch"
 
   - package-ecosystem: "swift"
     directory: "/"
     schedule:
       interval: "weekly"
+      day: "monday"
+      time: "09:00"
     open-pull-requests-limit: 10
+    labels:
+      - "dependencies"
+      - "swift"
+    assignees:
+      - "rselbach"
+    commit-message:
+      prefix: "chore"
+      include: "scope"
+    groups:
+      swift-minor:
+        update-types:
+          - "minor"
+          - "patch"
+      swift-major:
+        update-types:
+          - "major"
