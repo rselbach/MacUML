@@ -14,7 +14,6 @@ final class CodeTextView: NSTextView {
     var autoFormatOnSave = false
 
     private(set) var lineStartOffsets: [Int] = [0]
-    private var textHash: Int = 0
 
     override func shouldChangeText(in affectedCharRange: NSRange, replacementString: String?) -> Bool {
         let allowed = super.shouldChangeText(in: affectedCharRange, replacementString: replacementString)
@@ -45,7 +44,6 @@ final class CodeTextView: NSTextView {
         } else {
             rebuildLineStartOffsets(for: currentString)
         }
-        textHash = currentString.hashValue
         queueIncrementalHighlightRange()
         scheduleHighlighting()
     }
@@ -198,7 +196,7 @@ final class CodeTextView: NSTextView {
     }
 
     func needsUpdate(for newText: String) -> Bool {
-        newText.hashValue != textHash
+        string != newText
     }
 
     private func scheduleHighlighting() {
@@ -222,7 +220,6 @@ final class CodeTextView: NSTextView {
     func applyInitialHighlighting() {
         guard let storage = textStorage else { return }
         rebuildLineStartOffsets(for: storage.string)
-        textHash = storage.string.hashValue
         pendingHighlightRange = nil
         highlightTask?.cancel()
         highlightTask = Task { @MainActor [weak self] in
