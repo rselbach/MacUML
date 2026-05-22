@@ -28,7 +28,6 @@ class MermaidRenderer: NSObject, ObservableObject {
             }
         }
     }
-    @Published var lastExportError: String?
     let webView: DiagramWebView
     let validator: DiagramRuntimeValidator
     internal var lastSource: String = ""
@@ -37,9 +36,9 @@ class MermaidRenderer: NSObject, ObservableObject {
     internal let logger = Logging.logger(category: "mermaid")
     internal var mermaidReady = false
     private var pendingSource: String?
-    internal let zoomStep: Double = 0.1
-    internal let minZoom: Double = 0.25
-    internal let maxZoom: Double = 5.0
+    internal static let zoomStep: Double = 0.1
+    internal static let minZoom: Double = 0.25
+    internal static let maxZoom: Double = 5.0
 
     override init() {
         let config = WKWebViewConfiguration()
@@ -68,34 +67,18 @@ class MermaidRenderer: NSObject, ObservableObject {
         
         theme = AppSettings.shared.defaultDiagramTheme
 
-        contentController.add(
-            ScriptMessageHandler(renderer: self, name: "ready") { renderer, _ in
-                renderer.handleMermaidReady()
-            },
-            name: "ready"
-        )
-        contentController.add(
-            ScriptMessageHandler(renderer: self, name: "zoomChanged") { renderer, body in
-                renderer.handleZoomChangedMessage(body)
-            },
-            name: "zoomChanged"
-        )
+        contentController.add(self, name: "ready")
+        contentController.add(self, name: "zoomChanged")
         webView.navigationDelegate = self
         loadBaseHTML()
         
         webView.copyPNGHandler = { [weak self] in
             Task { @MainActor [weak self] in
                 guard let self else { return }
-                let exporter = DiagramExporter(webView: self.webView)
-                let result = await exporter.copyAsPNG()
-                switch result {
-                case .success(let pngData):
+                if case .success(let pngData) = await DiagramExporter(webView: self.webView).copyAsPNG() {
                     let pasteboard = NSPasteboard.general
                     pasteboard.clearContents()
                     pasteboard.setData(pngData, forType: .png)
-                    self.lastExportError = nil
-                case .failure(let error):
-                    self.lastExportError = error.errorDescription
                 }
             }
         }
@@ -103,16 +86,10 @@ class MermaidRenderer: NSObject, ObservableObject {
         webView.copySVGHandler = { [weak self] in
             Task { @MainActor [weak self] in
                 guard let self else { return }
-                let exporter = DiagramExporter(webView: self.webView)
-                let result = await exporter.copySVG()
-                switch result {
-                case .success(let svg):
+                if case .success(let svg) = await DiagramExporter(webView: self.webView).copySVG() {
                     let pasteboard = NSPasteboard.general
                     pasteboard.clearContents()
                     pasteboard.setString(svg, forType: .string)
-                    self.lastExportError = nil
-                case .failure(let error):
-                    self.lastExportError = error.errorDescription
                 }
             }
         }
@@ -282,5 +259,125 @@ class MermaidRenderer: NSObject, ObservableObject {
 
     private func handleValidatorFailure(message: String) {
         state = .failure(error: MermaidError(message: message, line: nil))
+    }
+}
+
+extension MermaidRenderer: WKScriptMessageHandler {
+    func userContentController(_ controller: WKUserContentController, didReceive message: WKScriptMessage) {
+        guard message.frameInfo.isMainFrame else { return }
+        switch message.name {
+        case "ready":
+            handleMermaidReady()
+        case "zoomChanged":
+            handleZoomChangedMessage(message.body)
+        default:
+            break
+        }
+    }
+}
+
+extension MermaidRenderer: WKNavigationDelegate {
+    func webView(
+        _ webView: WKWebView,
+        decidePolicyFor navigationAction: WKNavigationAction,
+        decisionHandler: @escaping @MainActor @Sendable (WKNavigationActionPolicy) -> Void
+    ) {
+        decisionHandler(DiagramSecurityPolicy.navigationPolicy(
+            for: navigationAction.request.url,
+            trustedLocalFiles: validator.trustedPreviewFiles
+        ))
+    }
+
+    nonisolated func webView(_ webView: WKWebView, didFinish navigation: WKNavigation!) {
+        Task { @MainActor in
+            validator.scheduleValidation()
+        }
+    }
+
+    nonisolated func webView(_ webView: WKWebView, didFail navigation: WKNavigation!, withError error: Error) {
+        Task { @MainActor in
+            logger.error("Navigation failed: \(error.localizedDescription)")
+            state = .failure(error: MermaidError(message: "Failed to load renderer", line: nil))
+        }
+    }
+}
+
+extension MermaidRenderer {
+    internal func applyTheme() {
+        guard mermaidReady else { return }
+
+        Task { @MainActor [weak self] in
+            guard let self else { return }
+            do {
+                _ = try await webView.callAsyncJavaScript(
+                    "window.setTheme(themeName);",
+                    arguments: ["themeName": self.theme.rawValue],
+                    contentWorld: .page
+                )
+            } catch {
+                self.logger.error("Failed to apply preview theme '\(self.theme.rawValue, privacy: .public)': \(error.localizedDescription, privacy: .public)")
+                self.state = .failure(error: MermaidError(message: "Failed to apply theme '\(self.theme.rawValue)': \(error.localizedDescription)", line: nil))
+            }
+        }
+    }
+}
+
+extension MermaidRenderer {
+    private static let zoomEpsilon: Double = 0.0001
+
+    func zoomIn() {
+        setZoom(zoomLevel + Self.zoomStep)
+    }
+
+    func zoomOut() {
+        setZoom(zoomLevel - Self.zoomStep)
+    }
+
+    func resetZoom() {
+        setZoom(1.0)
+    }
+
+    internal func setZoom(_ newLevel: Double) {
+        let rounded = (clampZoom(newLevel) * 100).rounded() / 100
+        zoomLevel = rounded
+
+        guard mermaidReady else { return }
+        Task {
+            await applyZoom(level: rounded)
+        }
+    }
+
+    internal func clampZoom(_ level: Double) -> Double {
+        min(max(level, Self.minZoom), Self.maxZoom)
+    }
+
+    internal func applyZoom(level: Double) async {
+        do {
+            _ = try await webView.callAsyncJavaScript(
+                "window.setZoom(level);",
+                arguments: ["level": level],
+                contentWorld: .page
+            )
+        } catch {
+            logger.error("Failed to set zoom to \(level, privacy: .public): \(error.localizedDescription, privacy: .public)")
+        }
+    }
+
+    func handleZoomChangedMessage(_ body: Any) {
+        guard let rawLevel = coerceToDouble(body) else {
+            logger.error("zoomChanged bridge payload is invalid: \(String(describing: body), privacy: .public)")
+            return
+        }
+
+        let normalized = (clampZoom(rawLevel) * 100).rounded() / 100
+        guard abs(normalized - zoomLevel) >= Self.zoomEpsilon else {
+            return
+        }
+
+        zoomLevel = normalized
+    }
+
+    private func coerceToDouble(_ value: Any) -> Double? {
+        (value as? NSNumber)?.doubleValue ?? value as? Double ?? Double(value as? String ?? "")
     }
 }

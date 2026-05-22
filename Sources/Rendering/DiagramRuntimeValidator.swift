@@ -168,30 +168,6 @@ final class DiagramRuntimeValidator {
     }
 
     func fetchMetrics() async -> DiagramMetrics? {
-        guard let webView else { return nil }
-
-        let js = """
-            (function() {
-                const svg = document.querySelector('#diagram svg');
-                if (!svg) {
-                    return { hasSVG: false, width: 0, height: 0 };
-                }
-                const rect = svg.getBoundingClientRect();
-                return { hasSVG: true, width: rect.width, height: rect.height };
-            })()
-            """
-
-        do {
-            guard let result = try await webView.evaluateJavaScript(js) as? [String: Any],
-                  let hasSVG = result["hasSVG"] as? Bool,
-                  let width = result["width"] as? Double,
-                  let height = result["height"] as? Double else {
-                return nil
-            }
-            return DiagramMetrics(hasSVG: hasSVG, width: width, height: height)
-        } catch {
-            logger.error("Failed to fetch diagram metrics: \(error.localizedDescription, privacy: .public)")
-            return nil
-        }
+        await webView?.fetchDiagramMetrics()
     }
 }

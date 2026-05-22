@@ -3,9 +3,8 @@ import AppKit
 
 final class CodeTextView: NSTextView {
     static let indentString = "    "
-    private static let highlightDebounceInterval: TimeInterval = 0.1
+    private static let highlightDebounceInterval: Duration = .milliseconds(100)
     private let highlighter = MermaidHighlighter.shared
-    private var highlightWorkItem: DispatchWorkItem?
     private var highlightTask: Task<Void, Never>?
     private var pendingHighlightRange: NSRange?
     var errorLine: Int?
@@ -164,34 +163,24 @@ final class CodeTextView: NSTextView {
     }
 
     private func lineIndex(atOrBefore position: Int) -> Int {
-        var low = 0
-        var high = lineStartOffsets.count
-
-        while low < high {
-            let mid = low + (high - low) / 2
-            if lineStartOffsets[mid] <= position {
-                low = mid + 1
-            } else {
-                high = mid
-            }
-        }
-
-        return max(0, low - 1)
+        max(0, Self.firstIndex(greaterThan: position, in: lineStartOffsets) - 1)
     }
 
     private func firstLineIndex(greaterThan position: Int) -> Int {
-        var low = 0
-        var high = lineStartOffsets.count
+        Self.firstIndex(greaterThan: position, in: lineStartOffsets)
+    }
 
+    static func firstIndex(greaterThan value: Int, in offsets: [Int]) -> Int {
+        var low = 0
+        var high = offsets.count
         while low < high {
             let mid = low + (high - low) / 2
-            if lineStartOffsets[mid] <= position {
-                low = mid + 1
-            } else {
+            if offsets[mid] > value {
                 high = mid
+            } else {
+                low = mid + 1
             }
         }
-
         return low
     }
 
@@ -200,21 +189,18 @@ final class CodeTextView: NSTextView {
     }
 
     private func scheduleHighlighting() {
-        highlightWorkItem?.cancel()
-        let workItem = DispatchWorkItem { [weak self] in
+        highlightTask?.cancel()
+        highlightTask = Task { @MainActor [weak self] in
+            do {
+                try await Task.sleep(for: Self.highlightDebounceInterval)
+            } catch { return }
             guard let self, let storage = self.textStorage else { return }
             let range = self.pendingHighlightRange
             self.pendingHighlightRange = nil
-            
-            self.highlightTask?.cancel()
-            self.highlightTask = Task { @MainActor [weak self] in
-                await self?.highlighter.highlight(storage, in: range)
-                guard !Task.isCancelled else { return }
-                self?.applyErrorHighlighting()
-            }
+            await self.highlighter.highlight(storage, in: range)
+            guard !Task.isCancelled else { return }
+            self.applyErrorHighlighting()
         }
-        highlightWorkItem = workItem
-        DispatchQueue.main.asyncAfter(deadline: .now() + Self.highlightDebounceInterval, execute: workItem)
     }
 
     func applyInitialHighlighting() {
@@ -255,6 +241,16 @@ final class CodeTextView: NSTextView {
         }
 
         pendingHighlightRange = range
+    }
+
+    func performFormat() {
+        let formatted = MermaidFormatter.format(string)
+        guard formatted != string else { return }
+        string = formatted
+        if let coordinator = delegate as? EditorView.Coordinator {
+            coordinator.text.wrappedValue = formatted
+            coordinator.lineCount.wrappedValue = lineStartOffsets.count
+        }
     }
 
     private func countNewlines(in value: String) -> Int {
@@ -305,17 +301,7 @@ struct EditorView: NSViewRepresentable {
         textView.string = text
         textView.applyInitialHighlighting()
 
-        textView.onFormatRequest = { [weak textView] in
-            guard let textView = textView else { return }
-            let formatted = MermaidFormatter.format(textView.string)
-            if formatted != textView.string {
-                textView.string = formatted
-                // Trigger the binding update
-                if let coordinator = textView.delegate as? Coordinator {
-                    coordinator.text.wrappedValue = formatted
-                }
-            }
-        }
+        textView.onFormatRequest = { [weak textView] in textView?.performFormat() }
 
         scrollView.documentView = textView
         scrollView.hasVerticalScroller = true
@@ -335,19 +321,8 @@ struct EditorView: NSViewRepresentable {
     func updateNSView(_ scrollView: NSScrollView, context: Context) {
         guard let textView = scrollView.documentView as? CodeTextView else { return }
         
-        // Update format callback in case the coordinator/text binding changed
-        textView.onFormatRequest = { [weak textView] in
-            guard let textView = textView else { return }
-            let formatted = MermaidFormatter.format(textView.string)
-            if formatted != textView.string {
-                textView.string = formatted
-                if let coordinator = textView.delegate as? Coordinator {
-                    coordinator.text.wrappedValue = formatted
-                    coordinator.lineCount.wrappedValue = textView.lineStartOffsets.count
-                }
-            }
-        }
-        
+        textView.onFormatRequest = { [weak textView] in textView?.performFormat() }
+
         textView.autoFormatOnSave = autoFormatOnSave
 
         let fontChanged = textView.font != editorFont
@@ -359,8 +334,8 @@ struct EditorView: NSViewRepresentable {
             let previousRanges = textView.selectedRanges
             let newText = text as NSString
             textView.string = text
-            textView.selectedRanges = previousRanges.map { 
-                $0.rangeValue.safeClamped(to: newText.length) as NSValue 
+            textView.selectedRanges = previousRanges.map {
+                ($0.rangeValue.clamped(to: newText.length) ?? NSRange(location: 0, length: 0)) as NSValue
             }
             textView.applyInitialHighlighting()
 

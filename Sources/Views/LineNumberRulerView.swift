@@ -1,5 +1,4 @@
 import AppKit
-import Combine
 
 private enum Constants {
     static let defaultFontSize: CGFloat = 11
@@ -13,13 +12,11 @@ private enum Constants {
 
 final class LineNumberRulerView: NSRulerView {
     private weak var textView: CodeTextView?
-    private var cancellables = Set<AnyCancellable>()
     private var lineNumberAttributes: [NSAttributedString.Key: Any] = [
         .font: NSFont.monospacedDigitSystemFont(ofSize: Constants.defaultFontSize, weight: .regular),
         .foregroundColor: NSColor.secondaryLabelColor
     ]
     private var cachedLineCount = 1
-
     init(textView: CodeTextView) {
         guard let scrollView = textView.enclosingScrollView else {
             fatalError("LineNumberRulerView requires a text view in a scroll view")
@@ -121,21 +118,31 @@ final class LineNumberRulerView: NSRulerView {
 
         if let contentView = scrollView?.contentView {
             contentView.postsBoundsChangedNotifications = true
-            NotificationCenter.default.publisher(for: NSView.boundsDidChangeNotification, object: contentView)
-                .receive(on: DispatchQueue.main)
-                .sink { [weak self] _ in self?.needsDisplay = true }
-                .store(in: &cancellables)
+            NotificationCenter.default.addObserver(
+                self,
+                selector: #selector(handleBoundsChange),
+                name: NSView.boundsDidChangeNotification,
+                object: contentView
+            )
         }
 
-        NotificationCenter.default.publisher(for: NSText.didChangeNotification, object: textView)
-            .receive(on: DispatchQueue.main)
-            .sink { [weak self] _ in
-                guard let self, let textView = self.textView else { return }
-                self.cachedLineCount = max(1, textView.lineStartOffsets.count)
-                self.recalculateThickness()
-                self.needsDisplay = true
-            }
-            .store(in: &cancellables)
+        NotificationCenter.default.addObserver(
+            self,
+            selector: #selector(handleTextDidChange),
+            name: NSText.didChangeNotification,
+            object: textView
+        )
+    }
+
+    @objc private func handleBoundsChange() {
+        needsDisplay = true
+    }
+
+    @objc private func handleTextDidChange() {
+        guard let textView else { return }
+        cachedLineCount = max(1, textView.lineStartOffsets.count)
+        recalculateThickness()
+        needsDisplay = true
     }
 
     private func recalculateThickness() {
@@ -158,18 +165,7 @@ final class LineNumberRulerView: NSRulerView {
 
         guard charIndex > 0 else { return 1 }
 
-        // Binary search for first offset > charIndex
-        var low = 0
-        var high = offsets.count
-        while low < high {
-            let mid = low + (high - low) / 2
-            if offsets[mid] > charIndex {
-                high = mid
-            } else {
-                low = mid + 1
-            }
-        }
-        return max(1, low)
+        return max(1, CodeTextView.firstIndex(greaterThan: charIndex, in: offsets))
     }
 
     private func draw(lineNumber: Int, atY y: CGFloat) {

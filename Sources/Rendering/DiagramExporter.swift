@@ -115,26 +115,6 @@ struct DiagramExporter {
     }
 
     private func getDiagramBounds() async -> CGRect? {
-        let js = """
-            (function() {
-                const svg = document.querySelector('#diagram svg');
-                if (!svg) return null;
-                const rect = svg.getBoundingClientRect();
-                return { x: rect.x, y: rect.y, width: rect.width, height: rect.height };
-            })()
-            """
-        do {
-            guard let result = try await webView.evaluateJavaScript(js) as? [String: Any],
-                  let x = result["x"] as? Double,
-                  let y = result["y"] as? Double,
-                  let width = result["width"] as? Double,
-                  let height = result["height"] as? Double else {
-                return nil
-            }
-            return CGRect(x: x, y: y, width: width, height: height)
-        } catch {
-            logger.error("Failed to get diagram bounds: \(error.localizedDescription)")
-            return nil
-        }
+        await webView.fetchDiagramBounds()
     }
 }

@@ -57,12 +57,7 @@ struct MermaidFormatter {
 }
 
 private extension String {
-    /// Removes trailing whitespace characters
     func trailingWhitespaceTrimmed() -> String {
-        var result = self
-        while result.last?.isWhitespace == true {
-            result.removeLast()
-        }
-        return result
+        String(reversed().drop(while: \.isWhitespace).reversed())
     }
 }
