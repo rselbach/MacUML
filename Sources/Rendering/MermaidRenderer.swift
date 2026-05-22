@@ -19,6 +19,8 @@ import AppKit
 /// ```
 @MainActor
 class MermaidRenderer: NSObject, ObservableObject {
+    private nonisolated static let scriptMessageNames = ["ready", "zoomChanged"]
+
     @Published var state: MermaidRenderState = .idle
     @Published var zoomLevel: Double = 1.0
     @Published var theme: MermaidTheme = .auto {
@@ -30,6 +32,7 @@ class MermaidRenderer: NSObject, ObservableObject {
     }
     let webView: DiagramWebView
     let validator: DiagramRuntimeValidator
+    private let contentController: WKUserContentController
     internal var lastSource: String = ""
     private var renderTask: Task<Void, Never>?
     private let debounceInterval: Duration = .milliseconds(300)
@@ -46,7 +49,7 @@ class MermaidRenderer: NSObject, ObservableObject {
         config.preferences.javaScriptCanOpenWindowsAutomatically = false
         config.defaultWebpagePreferences.allowsContentJavaScript = true
 
-        let contentController = WKUserContentController()
+        contentController = WKUserContentController()
         config.userContentController = contentController
 
         webView = DiagramWebView(frame: .zero, configuration: config)
@@ -67,8 +70,9 @@ class MermaidRenderer: NSObject, ObservableObject {
         
         theme = AppSettings.shared.defaultDiagramTheme
 
-        contentController.add(self, name: "ready")
-        contentController.add(self, name: "zoomChanged")
+        for name in Self.scriptMessageNames {
+            contentController.add(WeakScriptMessageHandler(delegate: self), name: name)
+        }
         webView.navigationDelegate = self
         loadBaseHTML()
         
@@ -95,6 +99,15 @@ class MermaidRenderer: NSObject, ObservableObject {
         }
         
         logger.info("MermaidRenderer init complete")
+    }
+
+    deinit {
+        let contentController = contentController
+        Task { @MainActor in
+            for name in Self.scriptMessageNames {
+                contentController.removeScriptMessageHandler(forName: name)
+            }
+        }
     }
 
     func refreshCurrentSource() {
@@ -379,5 +392,17 @@ extension MermaidRenderer {
 
     private func coerceToDouble(_ value: Any) -> Double? {
         (value as? NSNumber)?.doubleValue ?? value as? Double ?? Double(value as? String ?? "")
+    }
+}
+
+private final class WeakScriptMessageHandler: NSObject, WKScriptMessageHandler {
+    weak var delegate: (any WKScriptMessageHandler)?
+
+    init(delegate: any WKScriptMessageHandler) {
+        self.delegate = delegate
+    }
+
+    func userContentController(_ userContentController: WKUserContentController, didReceive message: WKScriptMessage) {
+        delegate?.userContentController(userContentController, didReceive: message)
     }
 }
