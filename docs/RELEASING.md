@@ -12,6 +12,7 @@ Repository secrets required by the workflow:
 - `APPLE_TEAM_ID`
 - `APPLE_APP_PASSWORD`
 - `SPARKLE_EDDSA_PRIVATE_KEY`
+- `DEEPSEEK_API_KEY`
 
 ## Create a release
 
@@ -30,7 +31,7 @@ Repository secrets required by the workflow:
    git push origin vX.Y.Z
    ```
 
-4. The release workflow builds/signs/notarizes `MacUML-X.Y.Z.dmg`, uploads GitHub Release assets, and deploys `appcast.xml` via GitHub Pages.
+4. The release workflow builds/signs/notarizes `MacUML-X.Y.Z.dmg`, generates release notes from the tag history, uploads GitHub Release assets, and deploys `appcast.xml` via GitHub Pages.
 
 ## Manual workflow dispatch
 
