@@ -13,6 +13,7 @@ extension CodeTextView {
         case rightArrow
         case upArrow
         case downArrow
+        case s
 
         init?(rawValue: UInt16) {
             switch Int(rawValue) {
@@ -26,6 +27,7 @@ extension CodeTextView {
             case kVK_RightArrow: self = .rightArrow
             case kVK_UpArrow: self = .upArrow
             case kVK_DownArrow: self = .downArrow
+            case kVK_ANSI_S: self = .s
             default: return nil
             }
         }
@@ -34,6 +36,16 @@ extension CodeTextView {
     func handleKeyDown(_ event: NSEvent) -> Bool {
         let flags = event.modifierFlags.intersection(.deviceIndependentFlagsMask)
         let hasShift = flags.contains(.shift)
+        let hasCommand = flags.contains(.command)
+
+        // Handle Cmd+S for auto-format on save
+        if hasCommand, !hasShift, event.keyCode == UInt16(kVK_ANSI_S) {
+            if AppSettings.shared.autoFormatOnSave {
+                onFormatRequest?()
+                // Return false to let the save proceed after formatting
+            }
+            return false
+        }
 
         guard let keyCode = KeyCode(rawValue: event.keyCode) else {
             return false
@@ -82,6 +94,9 @@ extension CodeTextView {
                 performMove(hasShift: hasShift, normal: #selector(moveToEndOfDocument(_:)), modify: #selector(moveToEndOfDocumentAndModifySelection(_:)))
                 return true
             }
+        case .s:
+            // Cmd+S is handled earlier; this handles plain 's' key
+            return false
         }
         return false
     }

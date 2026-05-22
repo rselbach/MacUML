@@ -19,6 +19,7 @@ final class AppSettings: ObservableObject {
     @AppStorage("editorFontFamily") var editorFontFamily: String = defaultFontFamily
     @AppStorage("showLineNumbers") var showLineNumbers: Bool = true
     @AppStorage("defaultDiagramTheme") var defaultDiagramTheme: MermaidTheme = .auto
+    @AppStorage("autoFormatOnSave") var autoFormatOnSave: Bool = false
     
     private init() {
         if UserDefaults.standard.string(forKey: "editorFontFamily") == nil {

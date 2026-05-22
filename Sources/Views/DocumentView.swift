@@ -42,6 +42,12 @@ struct DocumentView: View {
         }
         .frame(minWidth: Constants.windowMinWidth, minHeight: Constants.windowMinHeight)
         .focusedValue(\.renderer, renderer)
+        .focusedValue(\.formatDocument) { [document = $document] in
+            let formatted = MermaidFormatter.format(document.wrappedValue.text)
+            if formatted != document.wrappedValue.text {
+                document.wrappedValue.text = formatted
+            }
+        }
         .onChange(of: document.text) { _, newValue in
             pendingRenderSource = newValue
             scheduleDebouncedRender()

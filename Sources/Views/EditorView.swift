@@ -10,6 +10,7 @@ final class CodeTextView: NSTextView {
     private var pendingHighlightRange: NSRange?
     var errorLine: Int?
     var previousErrorRange: NSRange?
+    var onFormatRequest: (() -> Void)?
 
     private(set) var lineStartOffsets: [Int] = [0]
     private var textHash: Int = 0
@@ -302,6 +303,18 @@ struct EditorView: NSViewRepresentable {
         textView.string = text
         textView.applyInitialHighlighting()
 
+        textView.onFormatRequest = { [weak textView] in
+            guard let textView = textView else { return }
+            let formatted = MermaidFormatter.format(textView.string)
+            if formatted != textView.string {
+                textView.string = formatted
+                // Trigger the binding update
+                if let coordinator = textView.delegate as? Coordinator {
+                    coordinator.text.wrappedValue = formatted
+                }
+            }
+        }
+
         scrollView.documentView = textView
         scrollView.hasVerticalScroller = true
         scrollView.hasHorizontalScroller = false
@@ -319,6 +332,20 @@ struct EditorView: NSViewRepresentable {
 
     func updateNSView(_ scrollView: NSScrollView, context: Context) {
         guard let textView = scrollView.documentView as? CodeTextView else { return }
+        
+        // Update format callback in case the coordinator/text binding changed
+        textView.onFormatRequest = { [weak textView] in
+            guard let textView = textView else { return }
+            let formatted = MermaidFormatter.format(textView.string)
+            if formatted != textView.string {
+                textView.string = formatted
+                if let coordinator = textView.delegate as? Coordinator {
+                    coordinator.text.wrappedValue = formatted
+                    coordinator.lineCount.wrappedValue = textView.lineStartOffsets.count
+                }
+            }
+        }
+        
         let settings = AppSettings.shared
         let fontChanged = textView.font != settings.editorFont
         if fontChanged {

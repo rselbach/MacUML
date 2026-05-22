@@ -4,7 +4,7 @@ private enum Constants {
     static let fontSizeRange: ClosedRange<Double> = 9...24
     static let fontSizeLabelWidth: CGFloat = 45
     static let windowWidth: CGFloat = 400
-    static let windowHeight: CGFloat = 300
+    static let windowHeight: CGFloat = 320
 }
 
 struct SettingsView: View {
@@ -31,6 +31,8 @@ struct SettingsView: View {
                 }
                 
                 Toggle("Show Line Numbers", isOn: $settings.showLineNumbers)
+                
+                Toggle("Auto-format on Save", isOn: $settings.autoFormatOnSave)
             }
             
             Section("Diagram Preview") {

@@ -18,6 +18,7 @@ class AppDelegate: NSObject, NSApplicationDelegate, ObservableObject {
 struct MacUMLApp: App {
     @NSApplicationDelegateAdaptor(AppDelegate.self) var appDelegate
     @FocusedValue(\.renderer) private var renderer
+    @FocusedValue(\.formatDocument) private var formatDocument
 
     var body: some Scene {
         DocumentGroup(newDocument: MermaidDocument()) { file in
@@ -28,6 +29,12 @@ struct MacUMLApp: App {
             AboutCommand()
             CheckForUpdatesCommand(updater: appDelegate.updaterController?.updater)
             CommandGroup(after: .textEditing) {
+                Button("Format Document") {
+                    formatDocument?()
+                }
+                .keyboardShortcut("f", modifiers: [.command, .shift])
+                .disabled(formatDocument == nil)
+
                 Button("Refresh Preview") {
                     renderer?.refreshCurrentSource()
                 }
@@ -113,5 +120,16 @@ extension FocusedValues {
     var renderer: MermaidRenderer? {
         get { self[FocusedRendererKey.self] }
         set { self[FocusedRendererKey.self] = newValue }
+    }
+}
+
+struct FocusedFormatDocumentKey: FocusedValueKey {
+    typealias Value = () -> Void
+}
+
+extension FocusedValues {
+    var formatDocument: (() -> Void)? {
+        get { self[FocusedFormatDocumentKey.self] }
+        set { self[FocusedFormatDocumentKey.self] = newValue }
     }
 }
