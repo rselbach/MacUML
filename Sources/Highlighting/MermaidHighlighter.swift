@@ -130,26 +130,33 @@ final class MermaidHighlighter {
         keywordColor: NSColor
     ) -> [HighlightMatch] {
         var matches: [HighlightMatch] = []
-        var claimedRanges: [NSRange] = []
+        var claimedIndexes = IndexSet()
+
+        func appendMatch(_ range: NSRange, color: NSColor) {
+            let upperBound = NSMaxRange(range)
+            guard range.location >= 0, range.length > 0, upperBound > range.location else {
+                return
+            }
+
+            let integerRange = range.location..<upperBound
+            guard !claimedIndexes.intersects(integersIn: integerRange) else {
+                return
+            }
+
+            matches.append(HighlightMatch(range: range, color: color))
+            claimedIndexes.insert(integersIn: integerRange)
+        }
 
         for (regex, color) in patterns {
             regex.enumerateMatches(in: text, options: [], range: range) { match, _, _ in
-                guard let matchRange = match?.range,
-                      !claimedRanges.overlaps(matchRange) else {
-                    return
-                }
-                matches.append(HighlightMatch(range: matchRange, color: color))
-                claimedRanges.append(matchRange)
+                guard let matchRange = match?.range else { return }
+                appendMatch(matchRange, color: color)
             }
         }
 
         keywordPattern?.enumerateMatches(in: text, options: [], range: range) { match, _, _ in
-            guard let matchRange = match?.range,
-                  !claimedRanges.overlaps(matchRange) else {
-                return
-            }
-            matches.append(HighlightMatch(range: matchRange, color: keywordColor))
-            claimedRanges.append(matchRange)
+            guard let matchRange = match?.range else { return }
+            appendMatch(matchRange, color: keywordColor)
         }
 
         return matches
@@ -159,10 +166,4 @@ final class MermaidHighlighter {
 private struct HighlightMatch {
     let range: NSRange
     let color: NSColor
-}
-
-private extension Array where Element == NSRange {
-    func overlaps(_ range: NSRange) -> Bool {
-        contains { NSIntersectionRange($0, range).length > 0 }
-    }
 }
