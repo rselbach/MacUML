@@ -19,7 +19,6 @@ struct DocumentView: View {
     @StateObject private var settings = AppSettings.shared
 
     @State private var errorLine: Int?
-    @State private var showLargeFileWarning = false
     @State private var cachedLineCount: Int = 0
 
     var body: some View {
@@ -36,7 +35,7 @@ struct DocumentView: View {
 
                 if let error = renderer.state.error {
                     ErrorBar(error: error)
-                } else if showLargeFileWarning {
+                } else if cachedLineCount >= Constants.largeFileLineThreshold {
                     LargeFileWarningBar(lineCount: cachedLineCount)
                 }
             }
@@ -55,19 +54,29 @@ struct DocumentView: View {
         }
         .onChange(of: document.text) { _, newValue in
             renderer.render(source: newValue)
-            updateLargeFileWarning()
         }
         .onChange(of: renderer.state.error) { _, newError in
             errorLine = newError?.line
         }
         .onAppear {
+            cachedLineCount = Self.lineCount(in: document.text)
             renderer.render(source: document.text)
-            updateLargeFileWarning()
         }
     }
 
-    private func updateLargeFileWarning() {
-        showLargeFileWarning = cachedLineCount >= Constants.largeFileLineThreshold
+    nonisolated static func lineCount(in text: String) -> Int {
+        var count = 1
+        let textLength = text.utf16.count
+        var offset = 0
+
+        for char in text.utf16 {
+            offset += 1
+            if char == 10 && offset < textLength {
+                count += 1
+            }
+        }
+
+        return count
     }
 }
 
