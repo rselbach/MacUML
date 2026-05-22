@@ -40,7 +40,7 @@ extension CodeTextView {
 
         // Handle Cmd+S for auto-format on save
         if hasCommand, !hasShift, event.keyCode == UInt16(kVK_ANSI_S) {
-            if AppSettings.shared.autoFormatOnSave {
+            if autoFormatOnSave {
                 onFormatRequest?()
                 // Return false to let the save proceed after formatting
             }

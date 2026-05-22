@@ -16,6 +16,7 @@ private enum Constants {
 struct DocumentView: View {
     @Binding var document: MermaidDocument
     @StateObject private var renderer = MermaidRenderer()
+    @StateObject private var settings = AppSettings.shared
 
     @State private var errorLine: Int?
     @State private var showLargeFileWarning = false
@@ -24,7 +25,14 @@ struct DocumentView: View {
     var body: some View {
         HSplitView {
             VStack(spacing: 0) {
-                EditorView(text: $document.text, lineCount: $cachedLineCount, errorLine: errorLine)
+                EditorView(
+                    text: $document.text,
+                    lineCount: $cachedLineCount,
+                    errorLine: errorLine,
+                    editorFont: settings.editorFont,
+                    showLineNumbers: settings.showLineNumbers,
+                    autoFormatOnSave: settings.autoFormatOnSave
+                )
 
                 if let error = renderer.state.error {
                     ErrorBar(error: error)

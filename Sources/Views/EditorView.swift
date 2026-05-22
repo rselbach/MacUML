@@ -11,6 +11,7 @@ final class CodeTextView: NSTextView {
     var errorLine: Int?
     var previousErrorRange: NSRange?
     var onFormatRequest: (() -> Void)?
+    var autoFormatOnSave = false
 
     private(set) var lineStartOffsets: [Int] = [0]
     private var textHash: Int = 0
@@ -275,6 +276,9 @@ struct EditorView: NSViewRepresentable {
     @Binding var text: String
     @Binding var lineCount: Int
     var errorLine: Int?
+    var editorFont: NSFont
+    var showLineNumbers: Bool
+    var autoFormatOnSave: Bool
 
     func makeNSView(context: Context) -> NSScrollView {
         let scrollView = NSScrollView()
@@ -290,9 +294,10 @@ struct EditorView: NSViewRepresentable {
 
         textView.delegate = context.coordinator
         textView.isRichText = false
-        textView.font = AppSettings.shared.editorFont
+        textView.font = editorFont
         textView.textColor = NSColor.textColor
         textView.backgroundColor = NSColor.textBackgroundColor
+        textView.autoFormatOnSave = autoFormatOnSave
         textView.isAutomaticQuoteSubstitutionEnabled = false
         textView.isAutomaticDashSubstitutionEnabled = false
         textView.isAutomaticTextReplacementEnabled = false
@@ -320,11 +325,11 @@ struct EditorView: NSViewRepresentable {
         scrollView.hasHorizontalScroller = false
         scrollView.autohidesScrollers = true
         scrollView.verticalRulerView = LineNumberRulerView(textView: textView)
-        scrollView.hasVerticalRuler = AppSettings.shared.showLineNumbers
-        scrollView.rulersVisible = AppSettings.shared.showLineNumbers
+        scrollView.hasVerticalRuler = showLineNumbers
+        scrollView.rulersVisible = showLineNumbers
 
         if let rulerView = scrollView.verticalRulerView as? LineNumberRulerView {
-            rulerView.refresh(using: AppSettings.shared.editorFont)
+            rulerView.refresh(using: editorFont)
         }
 
         return scrollView
@@ -346,10 +351,11 @@ struct EditorView: NSViewRepresentable {
             }
         }
         
-        let settings = AppSettings.shared
-        let fontChanged = textView.font != settings.editorFont
+        textView.autoFormatOnSave = autoFormatOnSave
+
+        let fontChanged = textView.font != editorFont
         if fontChanged {
-            textView.font = settings.editorFont
+            textView.font = editorFont
         }
 
         if textView.needsUpdate(for: text) {
@@ -366,15 +372,15 @@ struct EditorView: NSViewRepresentable {
             }
         }
 
-        if scrollView.hasVerticalRuler != settings.showLineNumbers {
-            scrollView.hasVerticalRuler = settings.showLineNumbers
+        if scrollView.hasVerticalRuler != showLineNumbers {
+            scrollView.hasVerticalRuler = showLineNumbers
         }
-        if scrollView.rulersVisible != settings.showLineNumbers {
-            scrollView.rulersVisible = settings.showLineNumbers
+        if scrollView.rulersVisible != showLineNumbers {
+            scrollView.rulersVisible = showLineNumbers
         }
 
         if fontChanged, let rulerView = scrollView.verticalRulerView as? LineNumberRulerView {
-            rulerView.refresh(using: settings.editorFont)
+            rulerView.refresh(using: editorFont)
         }
 
         textView.setErrorLine(errorLine)
