@@ -3,6 +3,10 @@ import WebKit
 
 extension MermaidRenderer {
     internal func applyTheme() {
+        guard mermaidReady else {
+            return
+        }
+
         Task { @MainActor [weak self] in
             guard let self else { return }
             do {
