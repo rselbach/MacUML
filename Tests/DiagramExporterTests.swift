@@ -60,10 +60,7 @@ struct DiagramExporterTests {
         let exporter = DiagramExporter(webView: renderer.webView)
         let result = await exporter.copyAsPNG()
 
-        // Should fail in headless environment
-        if case .failure = result {
-            #expect(true, "PNG export fails as expected")
-        }
+        #expect(result == .failure(.noDiagram))
     }
 
     @Test("copySVG returns valid SVG string when present")

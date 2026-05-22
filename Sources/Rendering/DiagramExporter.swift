@@ -50,16 +50,19 @@ struct DiagramExporter {
         let config = WKSnapshotConfiguration()
         config.afterScreenUpdates = true
 
-        if let rect = await getDiagramBounds() {
-            let paddedRect = CGRect(
-                x: max(0, rect.origin.x - padding),
-                y: max(0, rect.origin.y - padding),
-                width: rect.width + padding * 2,
-                height: rect.height + padding * 2
-            )
-            let viewBounds = webView.bounds
-            config.rect = paddedRect.intersection(viewBounds)
+        guard let rect = await getDiagramBounds() else {
+            logger.error("PNG export failed: no diagram found")
+            return .failure(.noDiagram)
         }
+
+        let paddedRect = CGRect(
+            x: max(0, rect.origin.x - padding),
+            y: max(0, rect.origin.y - padding),
+            width: rect.width + padding * 2,
+            height: rect.height + padding * 2
+        )
+        let viewBounds = webView.bounds
+        config.rect = paddedRect.intersection(viewBounds)
 
         do {
             let image = try await webView.takeSnapshot(configuration: config)
