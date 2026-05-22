@@ -41,11 +41,12 @@ struct DiagramExporterTests {
         let exporter = DiagramExporter(webView: renderer.webView)
         let result = await exporter.copyAsPNG()
 
-        if case .failure(let error) = result {
-            #expect(true, "PNG export fails in headless environment: \(error.errorDescription ?? "unknown")")
-        } else {
+        guard case .failure(let error) = result else {
             Issue.record("Expected failure in headless environment but got success")
+            return
         }
+
+        #expect(error != .noDiagram)
     }
 
     @Test("copyAsPNG returns failure with no diagram")
@@ -112,8 +113,10 @@ struct DiagramExporterTests {
         let exporter = DiagramExporter(webView: renderer.webView)
         let result = await exporter.copySVG()
 
-        if case .failure = result {
-            #expect(true, "SVG export fails as expected for empty diagram")
+        if case .failure(let error) = result {
+            #expect(error == .svgNotFound)
+        } else {
+            Issue.record("Expected failure but got success: \(result)")
         }
     }
 
@@ -132,9 +135,17 @@ struct DiagramExporterTests {
         let resultNoPadding = await exporter.copyAsPNG(padding: 0)
         let resultWithPadding = await exporter.copyAsPNG(padding: 32)
 
-        // Both should fail in headless environment but not crash
-        if case .failure = resultNoPadding, case .failure = resultWithPadding {
-            #expect(true, "Both fail as expected in headless environment")
+        guard case .failure(let noPaddingError) = resultNoPadding else {
+            Issue.record("Expected no-padding export failure in headless environment")
+            return
         }
+
+        guard case .failure(let withPaddingError) = resultWithPadding else {
+            Issue.record("Expected padded export failure in headless environment")
+            return
+        }
+
+        #expect(noPaddingError != .noDiagram)
+        #expect(withPaddingError != .noDiagram)
     }
 }
