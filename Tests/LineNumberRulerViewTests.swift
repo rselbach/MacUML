@@ -93,4 +93,16 @@ struct LineNumberRulerViewTests {
         // "A\r\n" (0), "B\r\n" (3), "C" (6)
         #expect(textView.lineStartOffsets.count == 3)
     }
+
+    @Test("Formatting refreshes line offsets")
+    func formattingRefreshesLineOffsets() {
+        let textView = CodeTextView()
+        textView.string = "A\n\n\nB   "
+        textView.applyInitialHighlighting()
+
+        textView.performFormat()
+
+        #expect(textView.string == "A\n\nB\n")
+        #expect(textView.lineStartOffsets == [0, 2, 3])
+    }
 }

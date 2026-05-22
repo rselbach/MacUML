@@ -247,6 +247,10 @@ final class CodeTextView: NSTextView {
         let formatted = MermaidFormatter.format(string)
         guard formatted != string else { return }
         string = formatted
+        applyInitialHighlighting()
+        if let rulerView = enclosingScrollView?.verticalRulerView as? LineNumberRulerView {
+            rulerView.resetLineCount(using: formatted)
+        }
         if let coordinator = delegate as? EditorView.Coordinator {
             coordinator.text.wrappedValue = formatted
             coordinator.lineCount.wrappedValue = lineStartOffsets.count
