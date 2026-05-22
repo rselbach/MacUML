@@ -169,8 +169,10 @@ class MermaidRenderer: NSObject, ObservableObject {
             guard !Task.isCancelled else { return }
             
             guard let dict = result as? [String: Any], let success = dict["success"] as? Bool else {
-                state = .ready
-                await validator.auditDOM(context: "post-render")
+                let message = "Preview runtime returned an unexpected render response."
+                logger.error("\(message, privacy: .public)")
+                state = .failure(error: MermaidError(message: message, line: nil))
+                await validator.auditDOM(context: "malformed-render-response")
                 return
             }
 

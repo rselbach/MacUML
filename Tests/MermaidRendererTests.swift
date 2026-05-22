@@ -48,6 +48,25 @@ struct MermaidRendererTests {
         let svgHTML = try await renderer.webView.evaluateJavaScript(js) as? String
         #expect(svgHTML?.isEmpty == false)
     }
+
+    @Test("Malformed render response fails")
+    @MainActor
+    func malformedRenderResponseFails() async throws {
+        let renderer = MermaidRenderer()
+        try await waitForRuntimeReady(renderer: renderer, timeout: .seconds(5))
+
+        _ = try await renderer.webView.evaluateJavaScript(
+            "window.renderDiagram = async function() { return null; }; true;"
+        )
+
+        await renderer.performRender(source: "flowchart TD\nA-->B")
+
+        guard case .failure(let error) = renderer.state else {
+            Issue.record("Expected malformed response to fail, got \(renderer.state)")
+            return
+        }
+        #expect(error.message == "Preview runtime returned an unexpected render response.")
+    }
 }
 
 @MainActor
@@ -72,5 +91,27 @@ private func waitForRenderCompletion(
             }
             try await Task.sleep(for: .milliseconds(50))
         }
+    } while true
+}
+
+@MainActor
+private func waitForRuntimeReady(
+    renderer: MermaidRenderer,
+    timeout: Duration
+) async throws {
+    let clock = ContinuousClock()
+    let deadline = clock.now + timeout
+
+    repeat {
+        if renderer.mermaidReady {
+            return
+        }
+
+        if clock.now >= deadline {
+            Issue.record("Runtime did not become ready after \(timeout)")
+            return
+        }
+
+        try await Task.sleep(for: .milliseconds(50))
     } while true
 }
