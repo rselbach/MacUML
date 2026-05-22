@@ -37,6 +37,7 @@ final class MermaidHighlighter {
 
     private lazy var patterns: [(NSRegularExpression, NSColor)] = {
         let patternDefs: [(String, NSColor)] = [
+            ("%%\\{.+\\}%%", directiveColor),
             ("%%[^\\n]*", commentColor),
             ("\"[^\"\\n]*\"", stringColor),
             ("'[^'\\n]*'", stringColor),
@@ -49,7 +50,6 @@ final class MermaidHighlighter {
             ("\\{[^}]+\\}", nodeColor),
             ("\\(\\([^)]+\\)\\)", nodeColor),
             ("\\[\\[[^\\]]+\\]\\]", nodeColor),
-            ("%%\\{.+\\}%%", directiveColor),
         ]
 
         return patternDefs.compactMap { pattern, color in
@@ -130,19 +130,26 @@ final class MermaidHighlighter {
         keywordColor: NSColor
     ) -> [HighlightMatch] {
         var matches: [HighlightMatch] = []
+        var claimedRanges: [NSRange] = []
 
         for (regex, color) in patterns {
             regex.enumerateMatches(in: text, options: [], range: range) { match, _, _ in
-                if let matchRange = match?.range {
-                    matches.append(HighlightMatch(range: matchRange, color: color))
+                guard let matchRange = match?.range,
+                      !claimedRanges.overlaps(matchRange) else {
+                    return
                 }
+                matches.append(HighlightMatch(range: matchRange, color: color))
+                claimedRanges.append(matchRange)
             }
         }
 
         keywordPattern?.enumerateMatches(in: text, options: [], range: range) { match, _, _ in
-            if let matchRange = match?.range {
-                matches.append(HighlightMatch(range: matchRange, color: keywordColor))
+            guard let matchRange = match?.range,
+                  !claimedRanges.overlaps(matchRange) else {
+                return
             }
+            matches.append(HighlightMatch(range: matchRange, color: keywordColor))
+            claimedRanges.append(matchRange)
         }
 
         return matches
@@ -152,4 +159,10 @@ final class MermaidHighlighter {
 private struct HighlightMatch {
     let range: NSRange
     let color: NSColor
+}
+
+private extension Array where Element == NSRange {
+    func overlaps(_ range: NSRange) -> Bool {
+        contains { NSIntersectionRange($0, range).length > 0 }
+    }
 }

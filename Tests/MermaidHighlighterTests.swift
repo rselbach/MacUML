@@ -67,6 +67,18 @@ struct MermaidHighlighterTests {
         }
     }
 
+    @Test("Comments keep precedence over keywords, arrows, and nodes")
+    func commentPrecedence() async {
+        let text = "%% flowchart A-->B [Node]"
+        let storage = await makeStorage(text)
+        for i in 0..<text.count {
+            #expect(
+                foregroundColor(in: storage, at: i) == .systemGreen,
+                "comment char \(i) should stay green"
+            )
+        }
+    }
+
     // MARK: - Strings
 
     struct StringTestCase {
@@ -89,6 +101,18 @@ struct MermaidHighlighterTests {
             #expect(
                 foregroundColor(in: storage, at: i) == .systemRed,
                 "'\(tc.label)' char \(i) want red"
+            )
+        }
+    }
+
+    @Test("Strings keep precedence over keywords and arrows")
+    func stringPrecedence() async {
+        let text = "\"flowchart A-->B\""
+        let storage = await makeStorage(text)
+        for i in 0..<text.count {
+            #expect(
+                foregroundColor(in: storage, at: i) == .systemRed,
+                "string char \(i) should stay red"
             )
         }
     }
