@@ -49,25 +49,9 @@ final class LineNumberRulerView: NSRulerView {
         needsDisplay = true
     }
 
-    func resetLineCount(using text: String) {
+    func resetLineCount() {
         cachedLineCount = max(1, textView?.lineStartOffsets.count ?? 1)
         recalculateThickness()
-        needsDisplay = true
-    }
-
-    func applyLineDelta(_ delta: Int) {
-        guard delta != 0 else {
-            return
-        }
-
-        let oldDigits = String(max(1, cachedLineCount)).count
-        cachedLineCount = max(1, cachedLineCount + delta)
-        let newDigits = String(max(1, cachedLineCount)).count
-
-        if oldDigits != newDigits {
-            recalculateThickness()
-        }
-
         needsDisplay = true
     }
 

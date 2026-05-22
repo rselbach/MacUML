@@ -14,27 +14,6 @@ final class CodeTextView: NSTextView {
 
     private(set) var lineStartOffsets: [Int] = [0]
 
-    override func shouldChangeText(in affectedCharRange: NSRange, replacementString: String?) -> Bool {
-        let allowed = super.shouldChangeText(in: affectedCharRange, replacementString: replacementString)
-        guard allowed else {
-            return false
-        }
-
-        if let rulerView = enclosingScrollView?.verticalRulerView as? LineNumberRulerView {
-            let currentText = string as NSString
-            if affectedCharRange.location != NSNotFound,
-               affectedCharRange.location <= currentText.length {
-                let safeLength = min(affectedCharRange.length, currentText.length - affectedCharRange.location)
-                let safeRange = NSRange(location: affectedCharRange.location, length: safeLength)
-                let removedNewlines = countNewlines(in: currentText.substring(with: safeRange))
-                let insertedNewlines = countNewlines(in: replacementString ?? "")
-                rulerView.applyLineDelta(insertedNewlines - removedNewlines)
-            }
-        }
-
-        return true
-    }
-
     override func didChangeText() {
         super.didChangeText()
         let currentString = string
@@ -249,16 +228,12 @@ final class CodeTextView: NSTextView {
         string = formatted
         applyInitialHighlighting()
         if let rulerView = enclosingScrollView?.verticalRulerView as? LineNumberRulerView {
-            rulerView.resetLineCount(using: formatted)
+            rulerView.resetLineCount()
         }
         if let coordinator = delegate as? EditorView.Coordinator {
             coordinator.text.wrappedValue = formatted
             coordinator.lineCount.wrappedValue = lineStartOffsets.count
         }
-    }
-
-    private func countNewlines(in value: String) -> Int {
-        value.filter { $0 == "\n" }.count
     }
 
     override func keyDown(with event: NSEvent) {
@@ -344,7 +319,7 @@ struct EditorView: NSViewRepresentable {
             textView.applyInitialHighlighting()
 
             if let rulerView = scrollView.verticalRulerView as? LineNumberRulerView {
-                rulerView.resetLineCount(using: text)
+                rulerView.resetLineCount()
             }
         }
 
