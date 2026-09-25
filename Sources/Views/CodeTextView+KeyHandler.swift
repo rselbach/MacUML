@@ -119,12 +119,13 @@ extension CodeTextView {
         }
 
         let lineRange = text.lineRange(for: range)
-        var lines = text.substring(with: lineRange).components(separatedBy: "\n")
+        let selectedText = text.substring(with: lineRange)
+        var lines = selectedText.components(separatedBy: "\n")
 
         if lines.last == "" { lines.removeLast() }
 
         let indented = lines.map { Self.indentString + $0 }.joined(separator: "\n")
-        let finalText = lineRange.upperBound < text.length ? indented + "\n" : indented
+        let finalText = selectedText.hasSuffix("\n") ? indented + "\n" : indented
 
         if shouldChangeText(in: lineRange, replacementString: finalText) {
             undoManager?.beginUndoGrouping()
@@ -141,13 +142,14 @@ extension CodeTextView {
         let range = selectedRange()
         let text = string as NSString
         let lineRange = text.lineRange(for: range)
-        var lines = text.substring(with: lineRange).components(separatedBy: "\n")
+        let selectedText = text.substring(with: lineRange)
+        var lines = selectedText.components(separatedBy: "\n")
 
         if lines.last == "" { lines.removeLast() }
 
         let unindented = lines.map { stripLeadingIndent(from: $0) }.joined(separator: "\n")
 
-        let finalText = lineRange.upperBound < text.length ? unindented + "\n" : unindented
+        let finalText = selectedText.hasSuffix("\n") ? unindented + "\n" : unindented
 
         if shouldChangeText(in: lineRange, replacementString: finalText) {
             undoManager?.beginUndoGrouping()

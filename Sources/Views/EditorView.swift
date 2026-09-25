@@ -167,6 +167,15 @@ final class CodeTextView: NSTextView {
         string != newText
     }
 
+    func setStringPreservingSelection(_ newString: String) {
+        let previousRanges = selectedRanges
+        string = newString
+        let newLength = (newString as NSString).length
+        selectedRanges = previousRanges.compactMap {
+            $0.rangeValue.clampedSelection(to: newLength).map(NSValue.init(range:))
+        }
+    }
+
     private func scheduleHighlighting() {
         highlightTask?.cancel()
         highlightTask = Task { @MainActor [weak self] in
@@ -225,7 +234,7 @@ final class CodeTextView: NSTextView {
     func performFormat() {
         let formatted = MermaidFormatter.format(string)
         guard formatted != string else { return }
-        string = formatted
+        setStringPreservingSelection(formatted)
         applyInitialHighlighting()
         if let rulerView = enclosingScrollView?.verticalRulerView as? LineNumberRulerView {
             rulerView.resetLineCount()
@@ -310,12 +319,7 @@ struct EditorView: NSViewRepresentable {
         }
 
         if textView.needsUpdate(for: text) {
-            let previousRanges = textView.selectedRanges
-            let newText = text as NSString
-            textView.string = text
-            textView.selectedRanges = previousRanges.map {
-                ($0.rangeValue.clamped(to: newText.length) ?? NSRange(location: 0, length: 0)) as NSValue
-            }
+            textView.setStringPreservingSelection(text)
             textView.applyInitialHighlighting()
 
             if let rulerView = scrollView.verticalRulerView as? LineNumberRulerView {

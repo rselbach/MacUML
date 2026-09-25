@@ -35,6 +35,14 @@ extension CodeTextView {
         return lineStartOffsets[oneBasedLine - 1]
     }
 
+    func revealLine(_ oneBasedLine: Int) {
+        guard let lineStart = lineStartOffset(for: oneBasedLine) else { return }
+        let range = NSRange(location: lineStart, length: 0)
+        window?.makeFirstResponder(self)
+        setSelectedRange(range)
+        scrollRangeToVisible(range)
+    }
+
     private func removeErrorAttributes(in range: NSRange, storage: NSTextStorage) {
         guard let clampedRange = range.clamped(to: storage.length) else { return }
         storage.removeAttribute(.underlineStyle, range: clampedRange)

@@ -12,4 +12,12 @@ extension NSRange {
         guard result.length > 0 else { return nil }
         return result
     }
+
+    func clampedSelection(to maxLength: Int) -> NSRange? {
+        guard maxLength >= 0, location != NSNotFound else { return nil }
+
+        let safeLocation = min(location, maxLength)
+        let safeLength = min(length, maxLength - safeLocation)
+        return NSRange(location: safeLocation, length: safeLength)
+    }
 }

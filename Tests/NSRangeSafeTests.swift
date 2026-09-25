@@ -78,4 +78,26 @@ struct NSRangeSafeTests {
 
         #expect(result == NSRange(location: 0, length: 30))
     }
+
+    @Test("Selection clamp preserves a caret")
+    func selectionClampPreservesCaret() {
+        let range = NSRange(location: 10, length: 0)
+
+        #expect(range.clampedSelection(to: 100) == range)
+    }
+
+    @Test("Selection clamp moves a caret beyond the document to its end")
+    func selectionClampMovesCaretToEnd() {
+        let range = NSRange(location: 20, length: 0)
+
+        #expect(range.clampedSelection(to: 12) == NSRange(location: 12, length: 0))
+        #expect(range.clampedSelection(to: 0) == NSRange(location: 0, length: 0))
+    }
+
+    @Test("Selection clamp trims a selection at the document end")
+    func selectionClampTrimsSelection() {
+        let range = NSRange(location: 8, length: 10)
+
+        #expect(range.clampedSelection(to: 12) == NSRange(location: 8, length: 4))
+    }
 }
