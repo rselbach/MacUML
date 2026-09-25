@@ -12,10 +12,46 @@ A native macOS editor for [Mermaid](https://mermaid.js.org/) diagrams with live 
 ## Features
 
 - Native SwiftUI interface
-- Live diagram preview as you type
+- Live diagram preview with pause and manual refresh
 - Syntax highlighting for Mermaid code
 - Document-based app (`.mmd` and `.mermaid` files)
-- Automatic updates via Sparkle
+- Flowchart, sequence, class, state, and blank templates
+- SVG and PNG file export and clipboard copy
+- Editor, split, and preview layouts with a saved divider position
+- Error details and navigation to the affected source line
+- Local Mermaid syntax help
+- Automatic updates via Sparkle in release builds
+
+## Using MacUML
+
+Choose **File > New from Template** to start a diagram, then edit its Mermaid
+source. **Help > Mermaid Syntax Help** includes short examples and keyboard
+commands. Mermaid diagrams are text files, so they work with version control and
+other Mermaid tools.
+
+Use the toolbar's **Export** menu to save or copy the complete diagram as SVG or
+PNG. Export does not depend on the preview's zoom or pan position. When an edit
+contains an error, the last successful preview stays visible with a notice.
+Export becomes available again once the preview matches the source.
+
+Scroll to pan the preview. Pinch, or hold Option while scrolling, to zoom. **Fit to
+Window** resets the view. The displayed percentage is relative to that fit.
+Pause Live Preview while making a series of edits to a large file, then use
+Refresh Preview when ready.
+
+| Command | Shortcut |
+| --- | --- |
+| Editor / Split / Preview | ⌘1 / ⌘2 / ⌘3 |
+| Refresh Preview | ⌘R |
+| Fit to Window | ⌘0 |
+| Export PNG | ⌘⇧E |
+| Copy SVG | ⌘⇧C |
+| Format Document | ⌘⇧F |
+| Mermaid Syntax Help | ⌘/ |
+
+Format Document cleans up whitespace and preserves Mermaid syntax. The optional
+formatting setting in Settings applies to explicit Save and Save As commands.
+Autosave preserves in-progress typing. Formatting can be undone.
 
 ## Installation
 
@@ -42,6 +78,9 @@ just run
 - `just bundle` creates `.build/debug-bundle/MacUML.app`
 - `just run` opens `.build/debug-bundle/MacUML.app`
 
+Local bundles use the production sandbox entitlements and verify the final app's
+signature and entitlements. Debug builds disable Sparkle update checks.
+
 For release-style local packaging:
 
 ```bash
@@ -57,7 +96,7 @@ MacUML vendors Mermaid at `Sources/Resources/mermaid.min.js`.
 - Version: `11.12.2`
 - SHA-256: `d0830a6c05546e9edb8fe20a8f545f3e0dc7c4c3134d584bad9c13a99d7a71e0`
 
-See `RELEASING.md` for update and provenance steps.
+See [Releasing MacUML](docs/RELEASING.md) for update and provenance steps.
 
 ## Security-sensitive entitlements
 
@@ -67,7 +106,8 @@ MacUML ships sandboxed and keeps entitlements intentionally narrow.
 - `com.apple.security.files.user-selected.read-write`: user-opened/saved files
 - Sparkle mach-lookup temporary exceptions for updater helper services
 
-Policy is enforced by `scripts/verify-entitlements.sh` in CI.
+Policy is enforced by `scripts/verify-entitlements.sh` in CI and checked against
+the signed app during bundling.
 
 ## License
 
