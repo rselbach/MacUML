@@ -1,7 +1,7 @@
+import AppKit
 import Foundation
 import WebKit
 import os
-import AppKit
 
 /// Renders Mermaid diagrams in a WebView.
 ///
@@ -19,10 +19,13 @@ import AppKit
 /// ```
 @MainActor
 class MermaidRenderer: NSObject, ObservableObject {
-    private nonisolated static let scriptMessageNames = ["ready", "zoomChanged"]
+    private nonisolated static let scriptMessageNames = ["ready", "zoomChanged", "appearanceChanged"]
 
     @Published var state: MermaidRenderState = .idle
     @Published var zoomLevel: Double = 1.0
+    @Published private(set) var hasDiagram = false
+    @Published private(set) var isPreviewStale = false
+    @Published private(set) var canExport = false
     @Published var theme: MermaidTheme = .auto {
         didSet {
             if oldValue != theme {
@@ -35,10 +38,13 @@ class MermaidRenderer: NSObject, ObservableObject {
     private let contentController: WKUserContentController
     internal var lastSource: String = ""
     private var renderTask: Task<Void, Never>?
+    private var renderRevision: UInt64 = 0
+    private var successfulRevision: UInt64?
     private let debounceInterval: Duration = .milliseconds(300)
     internal let logger = Logging.logger(category: "mermaid")
     internal var mermaidReady = false
-    private var pendingSource: String?
+    private var recoveryAttempts = 0
+    private let maximumRecoveryAttempts = 2
     internal static let zoomStep: Double = 0.1
     internal static let minZoom: Double = 0.25
     internal static let maxZoom: Double = 5.0
@@ -53,9 +59,9 @@ class MermaidRenderer: NSObject, ObservableObject {
         config.userContentController = contentController
 
         webView = DiagramWebView(frame: .zero, configuration: config)
-#if DEBUG
-        webView.isInspectable = true
-#endif
+        #if DEBUG
+            webView.isInspectable = true
+        #endif
         webView.underPageBackgroundColor = .clear
 
         validator = DiagramRuntimeValidator(webView: webView)
@@ -67,7 +73,7 @@ class MermaidRenderer: NSObject, ObservableObject {
             onReady: { [weak self] in self?.handleValidatorReady() },
             onFailure: { [weak self] message in self?.handleValidatorFailure(message: message) }
         )
-        
+
         theme = AppSettings.shared.defaultDiagramTheme
 
         for name in Self.scriptMessageNames {
@@ -75,7 +81,7 @@ class MermaidRenderer: NSObject, ObservableObject {
         }
         webView.navigationDelegate = self
         loadBaseHTML()
-        
+
         webView.copyPNGHandler = { [weak self] in
             Task { @MainActor [weak self] in
                 guard let self else { return }
@@ -97,7 +103,7 @@ class MermaidRenderer: NSObject, ObservableObject {
                 }
             }
         }
-        
+
         logger.info("MermaidRenderer init complete")
     }
 
@@ -117,35 +123,49 @@ class MermaidRenderer: NSObject, ObservableObject {
     func render(source: String, force: Bool = false) {
         guard force || source != lastSource else { return }
         lastSource = source
+        renderRevision &+= 1
+        let requestedRevision = renderRevision
+        updatePreviewStatus()
+        state = source.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty ? .idle : .rendering
 
         renderTask?.cancel()
-        
+
         guard mermaidReady else {
             logger.info("Mermaid not ready, queueing render")
-            pendingSource = source
             validator.scheduleValidation()
             return
         }
 
-        renderTask = Task {
+        renderTask = Task { [weak self] in
+            guard let self else { return }
+            if source.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+                await performRender(source: source, revision: requestedRevision)
+                return
+            }
+
             do {
                 try await Task.sleep(for: debounceInterval)
             } catch {
                 return
             }
 
-            await performRender(source: source)
+            await performRender(source: source, revision: requestedRevision)
         }
     }
 
-    internal func performRender(source: String) async {
+    private func performRender(source: String, revision: UInt64) async {
         let trimmed = source.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !trimmed.isEmpty else {
             state = .idle
             do {
                 try await clearDiagram()
+                guard revision == renderRevision else { return }
+                successfulRevision = nil
+                updatePreviewStatus()
             } catch {
                 logger.error("Failed to clear diagram: \(error.localizedDescription, privacy: .public)")
+                guard revision == renderRevision else { return }
+                state = .failure(error: MermaidError(message: error.localizedDescription, line: nil))
             }
             return
         }
@@ -162,12 +182,12 @@ class MermaidRenderer: NSObject, ObservableObject {
         do {
             let result = try await webView.callAsyncJavaScript(
                 js,
-                arguments: ["source": trimmed],
+                arguments: ["source": source],
                 contentWorld: .page
             )
-            
-            guard !Task.isCancelled else { return }
-            
+
+            guard !Task.isCancelled, revision == renderRevision else { return }
+
             guard let dict = result as? [String: Any], let success = dict["success"] as? Bool else {
                 let message = "Preview runtime returned an unexpected render response."
                 logger.error("\(message, privacy: .public)")
@@ -181,7 +201,7 @@ class MermaidRenderer: NSObject, ObservableObject {
                     logger.debug("Dropping stale render result")
                     return
                 }
-                
+
                 if var metrics = await validator.fetchMetrics() {
                     guard metrics.hasSVG else {
                         let message = "Render reported success, but no SVG was found in preview."
@@ -194,10 +214,15 @@ class MermaidRenderer: NSObject, ObservableObject {
                     if viewHasSize && (metrics.width <= 1 || metrics.height <= 1) {
                         // Layout may not have settled yet; retry once after a
                         // brief delay before treating this as a real error.
-                        try? await Task.sleep(for: .milliseconds(100))
+                        do {
+                            try await Task.sleep(for: .milliseconds(100))
+                        } catch {
+                            return
+                        }
                         guard !Task.isCancelled else { return }
                         if let retry = await validator.fetchMetrics(),
-                           retry.hasSVG {
+                            retry.hasSVG
+                        {
                             metrics = retry
                         }
                     }
@@ -209,8 +234,10 @@ class MermaidRenderer: NSObject, ObservableObject {
                         return
                     }
                 }
-                
+
                 logger.info("Render succeeded")
+                successfulRevision = revision
+                updatePreviewStatus()
                 state = .ready
             } else if let error = dict["error"] as? String {
                 logger.info("Render failed: \(error)")
@@ -224,7 +251,7 @@ class MermaidRenderer: NSObject, ObservableObject {
 
             await validator.auditDOM(context: "post-render")
         } catch {
-            if !Task.isCancelled {
+            if !Task.isCancelled, revision == renderRevision, mermaidReady {
                 logger.error("Render failed: \(error.localizedDescription)")
                 state = .failure(error: MermaidError(message: error.localizedDescription, line: nil))
                 await validator.auditDOM(context: "render-error")
@@ -233,7 +260,7 @@ class MermaidRenderer: NSObject, ObservableObject {
     }
 
     private func clearDiagram() async throws {
-        try await webView.evaluateJavaScript("document.getElementById('diagram').innerHTML = '';")
+        try await webView.evaluateJavaScript("window.clearDiagram();")
     }
 
     private func loadBaseHTML() {
@@ -245,19 +272,19 @@ class MermaidRenderer: NSObject, ObservableObject {
 
         let normalizedPreviewURL = DiagramSecurityPolicy.normalizedFileURL(previewURL)
         validator.trustedPreviewFiles = [normalizedPreviewURL]
-        webView.loadFileURL(normalizedPreviewURL, allowingReadAccessTo: normalizedPreviewURL.deletingLastPathComponent())
+        webView.loadFileURL(
+            normalizedPreviewURL, allowingReadAccessTo: normalizedPreviewURL.deletingLastPathComponent())
     }
 
     func handleMermaidReady() {
         guard !mermaidReady else { return }
         mermaidReady = true
-        applyTheme()
-        Task {
+        recoveryAttempts = 0
+        Task { [weak self] in
+            guard let self else { return }
+            guard await applyThemeToRuntime() else { return }
             await applyZoom(level: zoomLevel)
-        }
-        if let source = pendingSource {
-            pendingSource = nil
-            render(source: source, force: true)
+            render(source: lastSource, force: true)
         }
     }
 
@@ -275,16 +302,47 @@ class MermaidRenderer: NSObject, ObservableObject {
     private func handleValidatorFailure(message: String) {
         state = .failure(error: MermaidError(message: message, line: nil))
     }
+
+    private func updatePreviewStatus() {
+        hasDiagram = successfulRevision != nil
+        isPreviewStale = hasDiagram && successfulRevision != renderRevision
+        canExport = hasDiagram && !isPreviewStale
+    }
+
+    private func recoverRenderer(after message: String) {
+        guard recoveryAttempts < maximumRecoveryAttempts else {
+            logger.error("Renderer recovery exhausted after: \(message, privacy: .public)")
+            state = .failure(error: MermaidError(message: "Failed to load renderer", line: nil))
+            return
+        }
+
+        recoveryAttempts += 1
+        logger.error("Recovering preview renderer after: \(message, privacy: .public)")
+        renderTask?.cancel()
+        validator.cancelValidation()
+        mermaidReady = false
+        renderRevision &+= 1
+        successfulRevision = nil
+        updatePreviewStatus()
+        state = hasSourceContent() ? .rendering : .idle
+        loadBaseHTML()
+    }
 }
 
 extension MermaidRenderer: WKScriptMessageHandler {
-    func userContentController(_ controller: WKUserContentController, didReceive message: WKScriptMessage) {
+    func userContentController(
+        _ controller: WKUserContentController, didReceive message: WKScriptMessage
+    ) {
         guard message.frameInfo.isMainFrame else { return }
         switch message.name {
         case "ready":
             handleMermaidReady()
         case "zoomChanged":
             handleZoomChangedMessage(message.body)
+        case "appearanceChanged":
+            if theme == .auto {
+                refreshCurrentSource()
+            }
         default:
             break
         }
@@ -297,10 +355,11 @@ extension MermaidRenderer: WKNavigationDelegate {
         decidePolicyFor navigationAction: WKNavigationAction,
         decisionHandler: @escaping @MainActor @Sendable (WKNavigationActionPolicy) -> Void
     ) {
-        decisionHandler(DiagramSecurityPolicy.navigationPolicy(
-            for: navigationAction.request.url,
-            trustedLocalFiles: validator.trustedPreviewFiles
-        ))
+        decisionHandler(
+            DiagramSecurityPolicy.navigationPolicy(
+                for: navigationAction.request.url,
+                trustedLocalFiles: validator.trustedPreviewFiles
+            ))
     }
 
     nonisolated func webView(_ webView: WKWebView, didFinish navigation: WKNavigation!) {
@@ -309,10 +368,27 @@ extension MermaidRenderer: WKNavigationDelegate {
         }
     }
 
-    nonisolated func webView(_ webView: WKWebView, didFail navigation: WKNavigation!, withError error: Error) {
+    nonisolated func webView(
+        _ webView: WKWebView, didFail navigation: WKNavigation!, withError error: Error
+    ) {
         Task { @MainActor in
-            logger.error("Navigation failed: \(error.localizedDescription)")
-            state = .failure(error: MermaidError(message: "Failed to load renderer", line: nil))
+            recoverRenderer(after: "navigation failed: \(error.localizedDescription)")
+        }
+    }
+
+    nonisolated func webView(
+        _ webView: WKWebView,
+        didFailProvisionalNavigation navigation: WKNavigation!,
+        withError error: Error
+    ) {
+        Task { @MainActor in
+            recoverRenderer(after: "provisional navigation failed: \(error.localizedDescription)")
+        }
+    }
+
+    nonisolated func webViewWebContentProcessDidTerminate(_ webView: WKWebView) {
+        Task { @MainActor in
+            recoverRenderer(after: "web content process terminated")
         }
     }
 }
@@ -321,18 +397,38 @@ extension MermaidRenderer {
     internal func applyTheme() {
         guard mermaidReady else { return }
 
-        Task { @MainActor [weak self] in
+        renderTask?.cancel()
+        renderRevision &+= 1
+        let requestedRevision = renderRevision
+        let source = lastSource
+        updatePreviewStatus()
+        state = source.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty ? .idle : .rendering
+
+        renderTask = Task { @MainActor [weak self] in
             guard let self else { return }
-            do {
-                _ = try await webView.callAsyncJavaScript(
-                    "window.setTheme(themeName);",
-                    arguments: ["themeName": self.theme.rawValue],
-                    contentWorld: .page
-                )
-            } catch {
-                self.logger.error("Failed to apply preview theme '\(self.theme.rawValue, privacy: .public)': \(error.localizedDescription, privacy: .public)")
-                self.state = .failure(error: MermaidError(message: "Failed to apply theme '\(self.theme.rawValue)': \(error.localizedDescription)", line: nil))
-            }
+            guard await applyThemeToRuntime() else { return }
+            guard requestedRevision == renderRevision else { return }
+            await performRender(source: source, revision: requestedRevision)
+        }
+    }
+
+    private func applyThemeToRuntime() async -> Bool {
+        do {
+            _ = try await webView.callAsyncJavaScript(
+                "window.setTheme(themeName);",
+                arguments: ["themeName": theme.rawValue],
+                contentWorld: .page
+            )
+            return true
+        } catch {
+            logger.error(
+                "Failed to apply preview theme '\(self.theme.rawValue, privacy: .public)': \(error.localizedDescription, privacy: .public)"
+            )
+            state = .failure(
+                error: MermaidError(
+                    message: "Failed to apply theme '\(self.theme.rawValue)': \(error.localizedDescription)",
+                    line: nil))
+            return false
         }
     }
 }
@@ -374,13 +470,16 @@ extension MermaidRenderer {
                 contentWorld: .page
             )
         } catch {
-            logger.error("Failed to set zoom to \(level, privacy: .public): \(error.localizedDescription, privacy: .public)")
+            logger.error(
+                "Failed to set zoom to \(level, privacy: .public): \(error.localizedDescription, privacy: .public)"
+            )
         }
     }
 
     func handleZoomChangedMessage(_ body: Any) {
         guard let rawLevel = coerceToDouble(body) else {
-            logger.error("zoomChanged bridge payload is invalid: \(String(describing: body), privacy: .public)")
+            logger.error(
+                "zoomChanged bridge payload is invalid: \(String(describing: body), privacy: .public)")
             return
         }
 
@@ -404,7 +503,9 @@ private final class WeakScriptMessageHandler: NSObject, WKScriptMessageHandler {
         self.delegate = delegate
     }
 
-    func userContentController(_ userContentController: WKUserContentController, didReceive message: WKScriptMessage) {
+    func userContentController(
+        _ userContentController: WKUserContentController, didReceive message: WKScriptMessage
+    ) {
         delegate?.userContentController(userContentController, didReceive: message)
     }
 }

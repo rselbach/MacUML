@@ -1,4 +1,6 @@
+import Foundation
 import Testing
+
 @testable import MacUML
 
 @Suite("Mermaid Renderer Tests")
@@ -9,6 +11,9 @@ struct MermaidRendererTests {
     func initialState() async {
         let renderer = MermaidRenderer()
         #expect(renderer.state == .idle)
+        #expect(!renderer.hasDiagram)
+        #expect(!renderer.isPreviewStale)
+        #expect(!renderer.canExport)
     }
 
     @Test("Empty source stays idle")
@@ -33,6 +38,9 @@ struct MermaidRendererTests {
         let js = "document.querySelector('#diagram svg')?.outerHTML ?? ''"
         let svgHTML = try await renderer.webView.evaluateJavaScript(js) as? String
         #expect(svgHTML?.isEmpty == false)
+        #expect(renderer.hasDiagram)
+        #expect(!renderer.isPreviewStale)
+        #expect(renderer.canExport)
     }
 
     @Test("Simple diagram renders to SVG after delayed render call")
@@ -59,13 +67,156 @@ struct MermaidRendererTests {
             "window.renderDiagram = async function() { return null; }; true;"
         )
 
-        await renderer.performRender(source: "flowchart TD\nA-->B")
+        renderer.render(source: "flowchart TD\nA-->B", force: true)
+        try await waitForState(renderer: renderer, timeout: .seconds(5)) {
+            if case .failure = $0.state { return true }
+            return false
+        }
 
         guard case .failure(let error) = renderer.state else {
             Issue.record("Expected malformed response to fail, got \(renderer.state)")
             return
         }
         #expect(error.message == "Preview runtime returned an unexpected render response.")
+    }
+
+    @Test("Labels containing Mermaid error phrases render")
+    @MainActor
+    func errorPhraseLabelsRender() async throws {
+        let renderer = MermaidRenderer()
+        renderer.render(source: "flowchart TD\nA[\"Syntax error\"] --> B[\"Parse error\"]")
+
+        try await waitForRenderCompletion(renderer: renderer, timeout: .seconds(5))
+
+        let text =
+            try await renderer.webView.evaluateJavaScript(
+                "document.querySelector('#diagram svg')?.textContent ?? ''"
+            ) as? String
+        #expect(text?.contains("Syntax error") == true)
+        #expect(text?.contains("Parse error") == true)
+    }
+
+    @Test("Error line includes leading CRLF blank lines and Unicode source")
+    @MainActor
+    func leadingBlankLineErrorMapping() async throws {
+        let renderer = MermaidRenderer()
+        renderer.render(source: "\r\n\r\nflowchart TD\r\nA[\"Troy 🐒\"] -->")
+
+        try await waitForState(renderer: renderer, timeout: .seconds(5)) {
+            if case .failure = $0.state { return true }
+            return false
+        }
+
+        guard case .failure(let error) = renderer.state else {
+            Issue.record("Expected malformed source to fail, got \(renderer.state)")
+            return
+        }
+        #expect(error.line == 4)
+    }
+
+    @Test("Clearing source invalidates pending work and prevents theme restoration")
+    @MainActor
+    func clearInvalidatesRenderedSource() async throws {
+        let renderer = MermaidRenderer()
+        renderer.render(source: "flowchart TD\nA[\"Troy\"] --> B[\"Abed\"]")
+        try await waitForRenderCompletion(renderer: renderer, timeout: .seconds(5))
+
+        renderer.render(source: "")
+        try await waitForState(renderer: renderer, timeout: .seconds(5)) { $0.state == .idle }
+        renderer.theme = .dark
+        try await Task.sleep(for: .milliseconds(400))
+
+        let hasSVG =
+            try await renderer.webView.evaluateJavaScript(
+                "document.querySelector('#diagram svg') !== null"
+            ) as? Bool
+        #expect(hasSVG == false)
+        #expect(!renderer.hasDiagram)
+        #expect(!renderer.canExport)
+
+        renderer.render(source: "flowchart TD\nA -->")
+        try await waitForState(renderer: renderer, timeout: .seconds(5)) {
+            if case .failure = $0.state { return true }
+            return false
+        }
+        guard case .failure = renderer.state else {
+            Issue.record("Expected invalid replacement source to fail")
+            return
+        }
+
+        let hasRestoredSVG =
+            try await renderer.webView.evaluateJavaScript(
+                "document.querySelector('#diagram svg') !== null"
+            ) as? Bool
+        #expect(hasRestoredSVG == false)
+    }
+
+    @Test("Failed current source marks the last successful diagram stale")
+    @MainActor
+    func failedSourceMarksPreviewStale() async throws {
+        let renderer = MermaidRenderer()
+        renderer.render(source: "flowchart TD\nA --> B")
+        try await waitForRenderCompletion(renderer: renderer, timeout: .seconds(5))
+
+        renderer.render(source: "flowchart TD\nA -->")
+        #expect(renderer.hasDiagram)
+        #expect(renderer.isPreviewStale)
+        #expect(!renderer.canExport)
+        try await waitForState(renderer: renderer, timeout: .seconds(5)) {
+            if case .failure = $0.state { return true }
+            return false
+        }
+
+        #expect(renderer.hasDiagram)
+        #expect(renderer.isPreviewStale)
+        #expect(!renderer.canExport)
+    }
+
+    @Test("Theme changes rerender the current native source")
+    @MainActor
+    func themeChangeRendersCurrentSource() async throws {
+        let renderer = MermaidRenderer()
+        renderer.render(source: "flowchart TD\nA[\"Troy\"] --> B[\"Abed\"]")
+        try await waitForRenderCompletion(renderer: renderer, timeout: .seconds(5))
+
+        renderer.theme = .forest
+        #expect(renderer.isPreviewStale)
+        #expect(!renderer.canExport)
+        try await waitForRenderCompletion(renderer: renderer, timeout: .seconds(5))
+
+        let values =
+            try await renderer.webView.evaluateJavaScript(
+                "({ text: document.querySelector('#diagram svg')?.textContent ?? '', theme: window.currentTheme })"
+            ) as? [String: Any]
+        #expect((values?["text"] as? String)?.contains("Troy") == true)
+        #expect(values?["theme"] as? String == "forest")
+        #expect(renderer.canExport)
+    }
+
+    @Test("Web content process recovery restores source theme and zoom")
+    @MainActor
+    func processRecoveryRestoresRenderer() async throws {
+        let renderer = MermaidRenderer()
+        renderer.theme = .forest
+        renderer.setZoom(1.4)
+        renderer.render(source: "flowchart TD\nA[\"Greendale\"] --> B[\"Study Room\"]")
+        try await waitForRenderCompletion(renderer: renderer, timeout: .seconds(5))
+
+        renderer.webViewWebContentProcessDidTerminate(renderer.webView)
+        await Task.yield()
+        try await waitForState(renderer: renderer, timeout: .seconds(5)) { !$0.mermaidReady }
+        #expect(!renderer.hasDiagram)
+        #expect(!renderer.canExport)
+        try await waitForRenderCompletion(renderer: renderer, timeout: .seconds(8))
+
+        let values =
+            try await renderer.webView.evaluateJavaScript(
+                "({ text: document.querySelector('#diagram svg')?.textContent ?? '', theme: window.currentTheme, zoom: window.zoomLevel })"
+            ) as? [String: Any]
+        #expect((values?["text"] as? String)?.contains("Greendale") == true)
+        #expect(values?["theme"] as? String == "forest")
+        #expect((values?["zoom"] as? NSNumber)?.doubleValue == 1.4)
+        #expect(renderer.canExport)
     }
 }
 
@@ -92,6 +243,24 @@ private func waitForRenderCompletion(
             try await Task.sleep(for: .milliseconds(50))
         }
     } while true
+}
+
+@MainActor
+private func waitForState(
+    renderer: MermaidRenderer,
+    timeout: Duration,
+    matches: (MermaidRenderer) -> Bool
+) async throws {
+    let clock = ContinuousClock()
+    let deadline = clock.now + timeout
+
+    while !matches(renderer) {
+        if clock.now >= deadline {
+            Issue.record("Renderer state timed out after \(timeout): \(renderer.state)")
+            return
+        }
+        try await Task.sleep(for: .milliseconds(50))
+    }
 }
 
 @MainActor

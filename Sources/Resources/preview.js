@@ -103,8 +103,8 @@ window.matchMedia('(prefers-color-scheme: dark)').addEventListener('change', () 
     if (window.currentTheme === 'auto') {
         initMermaid();
         updateBackground();
-        if (window.lastSource) {
-            window.renderDiagram(window.lastSource);
+        if (window.webkit && window.webkit.messageHandlers.appearanceChanged) {
+            window.webkit.messageHandlers.appearanceChanged.postMessage(true);
         }
     }
 });
@@ -113,9 +113,15 @@ window.setTheme = async function(theme) {
     window.currentTheme = theme;
     initMermaid();
     updateBackground();
-    if (window.lastSource) {
-        await window.renderDiagram(window.lastSource);
-    }
+};
+
+window.clearDiagram = function() {
+    window.renderSequence += 1;
+    const container = document.getElementById('diagram');
+    container.innerHTML = '';
+    window.panX = 0;
+    window.panY = 0;
+    updateInteractionState();
 };
 
 window.zoomLevel = 1.0;
@@ -311,7 +317,6 @@ function initInteractions() {
 }
 
 window.renderDiagram = async function(source) {
-    window.lastSource = source;
     const renderSequence = ++window.renderSequence;
     const container = document.getElementById('diagram');
     const tempContainer = document.createElement('div');
@@ -325,15 +330,14 @@ window.renderDiagram = async function(source) {
     document.body.appendChild(tempContainer);
 
     try {
+        await mermaid.parse(source);
         const id = 'mermaid-' + renderSequence + '-' + Date.now();
         const { svg } = await mermaid.render(id, source, tempContainer);
         if (renderSequence !== window.renderSequence) {
             return { success: true, stale: true };
         }
 
-        const hasError = svg.includes('Syntax error') || svg.includes('Parse error');
-
-        if (svg && !hasError) {
+        if (svg) {
             container.innerHTML = '<div class="pan-inner"><div class="zoom-inner">' + svg + '</div></div>';
             updateInteractionState();
             applyPan();
@@ -366,12 +370,23 @@ window.renderDiagram = async function(source) {
             }
         }
 
+        if (line !== null) {
+            line += leadingBlankLineOffset(source);
+        }
+
         return { success: false, error: msg, line: line };
     } finally {
         tempContainer.remove();
         cleanupUnexpectedBodyNodes('render-finally');
     }
 };
+
+function leadingBlankLineOffset(source) {
+    const match = source.match(/^(?:(?:[\t ]*)(?:\r\n|\r|\n))+/);
+    if (!match) return 0;
+    // Mermaid keeps the blank lines but reports a one-based source line as zero-based.
+    return 1;
+}
 
 document.addEventListener('DOMContentLoaded', () => {
     initInteractions();

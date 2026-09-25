@@ -116,7 +116,8 @@ final class DiagramRuntimeValidator {
                 "Runtime invalid: hasMermaid=\(lastFlags.hasMermaid, privacy: .public), hasRenderDiagram=\(lastFlags.hasRenderDiagram, privacy: .public), hasSetTheme=\(lastFlags.hasSetTheme, privacy: .public), hasSetZoom=\(lastFlags.hasSetZoom, privacy: .public)"
             )
             if hasSource() {
-                let message = "Preview runtime failed (mermaid:\(lastFlags.hasMermaid), render:\(lastFlags.hasRenderDiagram), theme:\(lastFlags.hasSetTheme), zoom:\(lastFlags.hasSetZoom))"
+                let message =
+                    "Preview runtime failed (mermaid:\(lastFlags.hasMermaid), render:\(lastFlags.hasRenderDiagram), theme:\(lastFlags.hasSetTheme), zoom:\(lastFlags.hasSetZoom))"
                 onFailure?(message)
             }
             return
@@ -140,30 +141,19 @@ final class DiagramRuntimeValidator {
 
         do {
             guard let result = try await webView.evaluateJavaScript(js) as? [String: Any],
-                  let extraNodeCount = result["extraNodeCount"] as? Int,
-                  extraNodeCount > 0 else {
+                let extraNodeCount = result["extraNodeCount"] as? Int,
+                extraNodeCount > 0
+            else {
                 return
             }
 
-            var details = "[]"
-            if let extras = result["extras"] as? [[String: Any]] {
-                do {
-                    let data = try JSONSerialization.data(withJSONObject: extras, options: [])
-                    if let text = String(data: data, encoding: .utf8) {
-                        details = text
-                    } else {
-                        logger.error("DOM audit (\(context, privacy: .public)) failed to decode extras payload as UTF-8")
-                    }
-                } catch {
-                    logger.error("DOM audit (\(context, privacy: .public)) failed to serialize extras payload: \(error.localizedDescription, privacy: .public)")
-                }
-            }
-
             logger.error(
-                "DOM audit (\(context, privacy: .public)): extra nodes=\(extraNodeCount, privacy: .public), details=\(details, privacy: .public)"
+                "DOM audit (\(context, privacy: .public)): extra nodes=\(extraNodeCount, privacy: .public)"
             )
         } catch {
-            logger.error("DOM audit failed (\(context, privacy: .public)): \(error.localizedDescription, privacy: .public)")
+            logger.error(
+                "DOM audit failed (\(context, privacy: .public)): \(error.localizedDescription, privacy: .public)"
+            )
         }
     }
 
