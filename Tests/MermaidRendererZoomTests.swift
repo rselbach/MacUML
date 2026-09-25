@@ -3,7 +3,7 @@ import Testing
 
 @testable import MacUML
 
-@Suite("Mermaid Renderer Zoom Tests")
+@Suite("Mermaid Renderer Zoom Tests", .serialized)
 struct MermaidRendererZoomTests {
 
     @Test("Initial zoom level is 1.0")

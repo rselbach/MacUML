@@ -3,7 +3,7 @@ import Testing
 
 @testable import MacUML
 
-@Suite("Mermaid Renderer Tests")
+@Suite("Mermaid Renderer Tests", .serialized)
 struct MermaidRendererTests {
 
     @Test("Render state starts idle")

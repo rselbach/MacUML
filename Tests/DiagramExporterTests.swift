@@ -4,7 +4,7 @@ import Testing
 
 @testable import MacUML
 
-@Suite("DiagramExporter Tests")
+@Suite("DiagramExporter Tests", .serialized)
 struct DiagramExporterTests {
     @Test("PNG export succeeds with complete labeled content")
     @MainActor
