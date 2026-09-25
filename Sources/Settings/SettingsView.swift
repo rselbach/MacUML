@@ -1,7 +1,6 @@
 import SwiftUI
 
 private enum Constants {
-    static let fontSizeRange: ClosedRange<Double> = 9...24
     static let fontSizeLabelWidth: CGFloat = 45
     static let windowWidth: CGFloat = 400
     static let windowHeight: CGFloat = 320
@@ -9,11 +8,12 @@ private enum Constants {
 
 struct SettingsView: View {
     @StateObject private var settings = AppSettings.shared
-    
+
     var body: some View {
         Form {
             Section("Source Editor") {
                 Picker("Font Family:", selection: $settings.editorFontFamily) {
+                    Text(AppSettings.systemFontFamily).tag(AppSettings.systemFontFamily)
                     ForEach(AppSettings.monospaceFonts, id: \.self) { fontName in
                         Text(fontName)
                             .font(.custom(fontName, size: 12))
@@ -21,20 +21,21 @@ struct SettingsView: View {
                     }
                 }
                 .pickerStyle(.menu)
-                
+
                 HStack {
                     Text("Font Size:")
-                    Slider(value: $settings.editorFontSize, in: Constants.fontSizeRange, step: 1)
+                    Slider(value: $settings.editorFontSize, in: AppSettings.fontSizeRange, step: 1)
+                        .accessibilityLabel("Editor font size")
                     Text("\(Int(settings.editorFontSize)) pt")
                         .monospacedDigit()
                         .frame(width: Constants.fontSizeLabelWidth, alignment: .trailing)
                 }
-                
+
                 Toggle("Show Line Numbers", isOn: $settings.showLineNumbers)
-                
+
                 Toggle("Auto-format on Save", isOn: $settings.autoFormatOnSave)
             }
-            
+
             Section("Diagram Preview") {
                 Picker("Default Theme:", selection: $settings.defaultDiagramTheme) {
                     ForEach(MermaidTheme.allCases, id: \.self) { theme in
