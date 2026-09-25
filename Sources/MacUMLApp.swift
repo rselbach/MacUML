@@ -28,6 +28,8 @@ struct MacUMLApp: App {
         }
         .defaultSize(width: 900, height: 600)
         .commands {
+            NewTemplateCommands()
+            SyntaxHelpCommand()
             AboutCommand()
             DocumentCommands()
             CheckForUpdatesCommand(updater: appDelegate.updaterController?.updater)
@@ -77,6 +79,11 @@ struct MacUMLApp: App {
         .windowStyle(.hiddenTitleBar)
         .windowResizability(.contentSize)
         .defaultPosition(.center)
+
+        Window("Mermaid Syntax Help", id: "syntax-help") {
+            SyntaxHelpView()
+        }
+        .defaultSize(width: 700, height: 700)
     }
 }
 

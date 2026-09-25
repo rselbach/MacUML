@@ -21,7 +21,7 @@ struct MermaidDocument: FileDocument {
     static var readableContentTypes: [UTType] { [.mermaidMMD, .mermaid, .plainText] }
     static var writableContentTypes: [UTType] { [.mermaidMMD, .mermaid] }
 
-    init(text: String = defaultContent) {
+    init(text: String = DiagramTemplate.sequence.source) {
         self.text = text
     }
 
@@ -46,17 +46,4 @@ struct MermaidDocument: FileDocument {
         FileWrapper(regularFileWithContents: Data(text.utf8))
     }
 
-    private static let defaultContent: String = {
-        let fallback = "sequenceDiagram\n    Troy->>Abed: Hello\n"
-        guard let url = Bundle.appResource(name: "DefaultDiagram", extension: "mmd") else {
-            Logging.logger(category: "document").error("Default diagram resource is missing")
-            return fallback
-        }
-        do {
-            return try String(contentsOf: url, encoding: .utf8)
-        } catch {
-            Logging.logger(category: "document").error("Cannot read default diagram: \(error.localizedDescription)")
-            return fallback
-        }
-    }()
 }
