@@ -168,6 +168,12 @@ function clampPan(x, y, zoomLevel) {
     };
 }
 
+function wheelDeltaInPixels(delta, deltaMode, pageSize) {
+    if (deltaMode === WheelEvent.DOM_DELTA_LINE) return delta * 16;
+    if (deltaMode === WheelEvent.DOM_DELTA_PAGE) return delta * pageSize;
+    return delta;
+}
+
 function applyZoom() {
     const container = document.getElementById('diagram');
     const inner = container.querySelector('.zoom-inner');
@@ -297,12 +303,20 @@ function initInteractions() {
 
     container.addEventListener('wheel', (event) => {
         if (!hasRenderedSVG()) return;
+        const deltaX = wheelDeltaInPixels(event.deltaX, event.deltaMode, container.clientWidth);
+        const deltaY = wheelDeltaInPixels(event.deltaY, event.deltaMode, container.clientHeight);
+        if (deltaX === 0 && deltaY === 0) return;
+
         event.preventDefault();
-        const delta = event.deltaY === 0 ? event.deltaX : event.deltaY;
-        if (delta === 0) return;
-        const scaleFactor = Math.exp(-delta * 0.002);
-        const targetZoom = window.zoomLevel * scaleFactor;
-        window.setZoom(targetZoom, event.clientX, event.clientY);
+        if (event.altKey || event.metaKey || event.ctrlKey) {
+            const zoomDelta = deltaY === 0 ? deltaX : deltaY;
+            const scaleFactor = Math.exp(-zoomDelta * 0.002);
+            const targetZoom = window.zoomLevel * scaleFactor;
+            window.setZoom(targetZoom, event.clientX, event.clientY);
+            return;
+        }
+
+        window.setPan(window.panX - deltaX, window.panY - deltaY);
     }, { passive: false });
 
     document.addEventListener('gesturestart', (event) => {
