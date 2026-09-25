@@ -5,7 +5,7 @@ extension UTType {
     static var mermaidMMD: UTType {
         UTType(importedAs: "com.mermaid.mmd", conformingTo: .plainText)
     }
-    
+
     static var mermaid: UTType {
         UTType(importedAs: "com.mermaid.mermaid", conformingTo: .plainText)
     }
@@ -26,26 +26,37 @@ struct MermaidDocument: FileDocument {
     }
 
     init(configuration: ReadConfiguration) throws {
-        guard let data = configuration.file.regularFileContents,
-              let string = String(data: data, encoding: .utf8)
+        try self.init(fileWrapper: configuration.file)
+    }
+
+    init(fileWrapper: FileWrapper) throws {
+        guard let data = fileWrapper.regularFileContents,
+            let string = String(data: data, encoding: .utf8)
         else {
             throw CocoaError(.fileReadCorruptFile)
         }
         text = string
     }
 
-    func fileWrapper(configuration: WriteConfiguration) throws -> FileWrapper {
-        guard let data = text.data(using: .utf8) else {
-            throw CocoaError(.fileWriteInapplicableStringEncoding)
-        }
-        return .init(regularFileWithContents: data)
+    func fileWrapper(configuration: WriteConfiguration) -> FileWrapper {
+        fileWrapper()
+    }
+
+    func fileWrapper() -> FileWrapper {
+        FileWrapper(regularFileWithContents: Data(text.utf8))
     }
 
     private static let defaultContent: String = {
-        guard let url = Bundle.appResource(name: "DefaultDiagram", extension: "mmd"),
-              let content = try? String(contentsOf: url, encoding: .utf8) else {
-            return "sequenceDiagram\n    A->>B: Hello"
+        let fallback = "sequenceDiagram\n    Troy->>Abed: Hello\n"
+        guard let url = Bundle.appResource(name: "DefaultDiagram", extension: "mmd") else {
+            Logging.logger(category: "document").error("Default diagram resource is missing")
+            return fallback
         }
-        return content
+        do {
+            return try String(contentsOf: url, encoding: .utf8)
+        } catch {
+            Logging.logger(category: "document").error("Cannot read default diagram: \(error.localizedDescription)")
+            return fallback
+        }
     }()
 }

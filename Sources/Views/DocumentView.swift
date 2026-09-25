@@ -1,5 +1,5 @@
-import SwiftUI
 import AppKit
+import SwiftUI
 
 private enum Constants {
     static let editorMinWidth: CGFloat = 300
@@ -29,8 +29,7 @@ struct DocumentView: View {
                     lineCount: $cachedLineCount,
                     errorLine: errorLine,
                     editorFont: settings.editorFont,
-                    showLineNumbers: settings.showLineNumbers,
-                    autoFormatOnSave: settings.autoFormatOnSave
+                    showLineNumbers: settings.showLineNumbers
                 )
 
                 if let error = renderer.state.error {
@@ -45,13 +44,8 @@ struct DocumentView: View {
                 .frame(minWidth: Constants.previewMinWidth)
         }
         .frame(minWidth: Constants.windowMinWidth, minHeight: Constants.windowMinHeight)
-        .focusedValue(\.renderer, renderer)
-        .focusedValue(\.formatDocument) { [document = $document] in
-            let formatted = MermaidFormatter.format(document.wrappedValue.text)
-            if formatted != document.wrappedValue.text {
-                document.wrappedValue.text = formatted
-            }
-        }
+        .focusedSceneValue(\.renderer, renderer)
+        .focusedSceneValue(\.formatDocument, formatDocument)
         .onChange(of: document.text) { _, newValue in
             renderer.render(source: newValue)
         }
@@ -61,6 +55,13 @@ struct DocumentView: View {
         .onAppear {
             cachedLineCount = Self.lineCount(in: document.text)
             renderer.render(source: document.text)
+        }
+    }
+
+    private func formatDocument() {
+        let formatted = MermaidFormatter.format(document.text)
+        if formatted != document.text {
+            document.text = formatted
         }
     }
 

@@ -29,6 +29,7 @@ struct MacUMLApp: App {
         .defaultSize(width: 900, height: 600)
         .commands {
             AboutCommand()
+            DocumentCommands()
             CheckForUpdatesCommand(updater: appDelegate.updaterController?.updater)
             CommandGroup(after: .textEditing) {
                 Button("Format Document") {

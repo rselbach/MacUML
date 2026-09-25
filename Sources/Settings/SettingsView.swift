@@ -33,7 +33,8 @@ struct SettingsView: View {
 
                 Toggle("Show Line Numbers", isOn: $settings.showLineNumbers)
 
-                Toggle("Auto-format on Save", isOn: $settings.autoFormatOnSave)
+                Toggle("Format when choosing Save or Save As", isOn: $settings.autoFormatOnSave)
+                    .help("Clean up whitespace before explicit Save commands. Autosave preserves your typing.")
             }
 
             Section("Diagram Preview") {

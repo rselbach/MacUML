@@ -1,5 +1,6 @@
-import Testing
 import AppKit
+import Testing
+
 @testable import MacUML
 
 @Suite("Line Number Ruler View Tests")
@@ -36,7 +37,7 @@ struct LineNumberRulerViewTests {
 
         #expect(textView.lineStartOffsets.count == 2)
         #expect(textView.lineStartOffsets[0] == 0)
-        #expect(textView.lineStartOffsets[1] == 9) // "Line one\n" is 9 chars
+        #expect(textView.lineStartOffsets[1] == 9)  // "Line one\n" is 9 chars
     }
 
     @Test("Multiple lines tracked correctly")
@@ -56,8 +57,8 @@ struct LineNumberRulerViewTests {
         textView.string = "First\nSecond\nThird"
         textView.applyInitialHighlighting()
 
-        #expect(textView.lineStartOffset(for: 1) == 0)   // "First" starts at 0
-        #expect(textView.lineStartOffset(for: 2) == 6)   // "Second" starts at 6
+        #expect(textView.lineStartOffset(for: 1) == 0)  // "First" starts at 0
+        #expect(textView.lineStartOffset(for: 2) == 6)  // "Second" starts at 6
         #expect(textView.lineStartOffset(for: 3) == 13)  // "Third" starts at 13
     }
 
@@ -100,7 +101,8 @@ struct LineNumberRulerViewTests {
         textView.string = "A\n\n\nB   "
         textView.applyInitialHighlighting()
 
-        textView.performFormat()
+        textView.setStringPreservingSelection(MermaidFormatter.format(textView.string))
+        textView.applyInitialHighlighting()
 
         #expect(textView.string == "A\n\nB\n")
         #expect(textView.lineStartOffsets == [0, 2, 3])

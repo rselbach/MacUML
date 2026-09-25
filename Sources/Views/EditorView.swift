@@ -1,5 +1,5 @@
-import SwiftUI
 import AppKit
+import SwiftUI
 
 final class CodeTextView: NSTextView {
     static let indentString = "    "
@@ -9,8 +9,6 @@ final class CodeTextView: NSTextView {
     private var pendingHighlightRange: NSRange?
     var errorLine: Int?
     var previousErrorRange: NSRange?
-    var onFormatRequest: (() -> Void)?
-    var autoFormatOnSave = false
 
     private(set) var lineStartOffsets: [Int] = [0]
 
@@ -27,8 +25,8 @@ final class CodeTextView: NSTextView {
         let utf16 = currentString.utf16
         // Pre-allocate to avoid reallocation overhead. Assuming average line length of 40.
         offsets.reserveCapacity(utf16.count / 40 + 1)
-        
-        let newline: UTF16.CodeUnit = 10 // '\n'
+
+        let newline: UTF16.CodeUnit = 10  // '\n'
         let textLength = utf16.count
         var offset = 0
         for char in utf16 {
@@ -98,7 +96,8 @@ final class CodeTextView: NSTextView {
         guard let storage = textStorage else { return }
         let editedRange = storage.editedRange
         guard editedRange.location != NSNotFound,
-              editedRange.location <= storage.length else {
+            editedRange.location <= storage.length
+        else {
             return
         }
 
@@ -122,20 +121,6 @@ final class CodeTextView: NSTextView {
         pendingHighlightRange = range
     }
 
-    func performFormat() {
-        let formatted = MermaidFormatter.format(string)
-        guard formatted != string else { return }
-        setStringPreservingSelection(formatted)
-        applyInitialHighlighting()
-        if let rulerView = enclosingScrollView?.verticalRulerView as? LineNumberRulerView {
-            rulerView.resetLineCount()
-        }
-        if let coordinator = delegate as? EditorView.Coordinator {
-            coordinator.text.wrappedValue = formatted
-            coordinator.lineCount.wrappedValue = lineStartOffsets.count
-        }
-    }
-
     override func keyDown(with event: NSEvent) {
         if handleKeyDown(event) {
             return
@@ -150,7 +135,6 @@ struct EditorView: NSViewRepresentable {
     var errorLine: Int?
     var editorFont: NSFont
     var showLineNumbers: Bool
-    var autoFormatOnSave: Bool
 
     func makeNSView(context: Context) -> NSScrollView {
         let scrollView = NSScrollView()
@@ -161,7 +145,8 @@ struct EditorView: NSViewRepresentable {
         textView.isVerticallyResizable = true
         textView.isHorizontallyResizable = false
         textView.autoresizingMask = [.width]
-        textView.textContainer?.containerSize = NSSize(width: scrollView.contentSize.width, height: CGFloat.greatestFiniteMagnitude)
+        textView.textContainer?.containerSize = NSSize(
+            width: scrollView.contentSize.width, height: CGFloat.greatestFiniteMagnitude)
         textView.textContainer?.widthTracksTextView = true
 
         textView.delegate = context.coordinator
@@ -169,7 +154,6 @@ struct EditorView: NSViewRepresentable {
         textView.font = editorFont
         textView.textColor = NSColor.textColor
         textView.backgroundColor = NSColor.textBackgroundColor
-        textView.autoFormatOnSave = autoFormatOnSave
         textView.isAutomaticQuoteSubstitutionEnabled = false
         textView.isAutomaticDashSubstitutionEnabled = false
         textView.isAutomaticTextReplacementEnabled = false
@@ -179,8 +163,6 @@ struct EditorView: NSViewRepresentable {
 
         textView.string = text
         textView.applyInitialHighlighting()
-
-        textView.onFormatRequest = { [weak textView] in textView?.performFormat() }
 
         scrollView.documentView = textView
         scrollView.hasVerticalScroller = true
@@ -199,10 +181,6 @@ struct EditorView: NSViewRepresentable {
 
     func updateNSView(_ scrollView: NSScrollView, context: Context) {
         guard let textView = scrollView.documentView as? CodeTextView else { return }
-        
-        textView.onFormatRequest = { [weak textView] in textView?.performFormat() }
-
-        textView.autoFormatOnSave = autoFormatOnSave
 
         let fontChanged = textView.font != editorFont
         if fontChanged {

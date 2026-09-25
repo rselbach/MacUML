@@ -23,7 +23,7 @@ struct CodeTextViewTests {
         textView.string = "flowchart TD   "
         textView.setSelectedRange(NSRange(location: 15, length: 0))
 
-        textView.performFormat()
+        textView.setStringPreservingSelection(MermaidFormatter.format(textView.string))
 
         #expect(textView.string == "flowchart TD\n")
         #expect(textView.selectedRange() == NSRange(location: 13, length: 0))
