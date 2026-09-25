@@ -24,10 +24,11 @@ struct MacUMLApp: App {
 
     var body: some Scene {
         DocumentGroup(newDocument: MermaidDocument()) { file in
-            DocumentView(document: file.$document)
+            DocumentView(document: file.$document, fileURL: file.fileURL)
         }
         .defaultSize(width: 900, height: 600)
         .commands {
+            ExportCommands()
             NewTemplateCommands()
             SyntaxHelpCommand()
             AboutCommand()

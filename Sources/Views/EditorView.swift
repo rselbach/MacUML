@@ -129,16 +129,26 @@ final class CodeTextView: NSTextView {
     }
 }
 
+@MainActor
+final class EditorActions {
+    weak var textView: CodeTextView?
+
+    func revealLine(_ line: Int) { textView?.revealLine(line) }
+}
+
 struct EditorView: NSViewRepresentable {
     @Binding var text: String
     @Binding var lineCount: Int
     var errorLine: Int?
     var editorFont: NSFont
     var showLineNumbers: Bool
+    var actions: EditorActions? = nil
 
     func makeNSView(context: Context) -> NSScrollView {
         let scrollView = NSScrollView()
         let textView = CodeTextView()
+        actions?.textView = textView
+        textView.setAccessibilityLabel("Mermaid source")
 
         textView.minSize = NSSize(width: 0, height: 0)
         textView.maxSize = NSSize(width: CGFloat.greatestFiniteMagnitude, height: CGFloat.greatestFiniteMagnitude)

@@ -98,55 +98,8 @@ class MermaidRenderer: NSObject, ObservableObject {
             self?.canExport ?? false
         }
 
-        webView.copyPNGHandler = { [weak self] in
-            Task { @MainActor [weak self] in
-                guard let self else { return }
-                guard self.canExport else {
-                    self.exportErrorHandler?(.noDiagram)
-                    return
-                }
-                let exportRevision = self.renderRevision
-                switch await DiagramExporter(webView: self.webView).copyAsPNG() {
-                case .success(let pngData):
-                    guard exportRevision == self.renderRevision, self.canExport else {
-                        self.exportErrorHandler?(.previewChanged)
-                        return
-                    }
-                    let pasteboard = NSPasteboard.general
-                    pasteboard.clearContents()
-                    if !pasteboard.setData(pngData, forType: .png) {
-                        self.exportErrorHandler?(.pasteboardWriteFailed)
-                    }
-                case .failure(let error):
-                    self.exportErrorHandler?(error)
-                }
-            }
-        }
-
-        webView.copySVGHandler = { [weak self] in
-            Task { @MainActor [weak self] in
-                guard let self else { return }
-                guard self.canExport else {
-                    self.exportErrorHandler?(.noDiagram)
-                    return
-                }
-                let exportRevision = self.renderRevision
-                switch await DiagramExporter(webView: self.webView).copySVG() {
-                case .success(let svg):
-                    guard exportRevision == self.renderRevision, self.canExport else {
-                        self.exportErrorHandler?(.previewChanged)
-                        return
-                    }
-                    let pasteboard = NSPasteboard.general
-                    pasteboard.clearContents()
-                    if !pasteboard.setString(svg, forType: .string) {
-                        self.exportErrorHandler?(.pasteboardWriteFailed)
-                    }
-                case .failure(let error):
-                    self.exportErrorHandler?(error)
-                }
-            }
-        }
+        webView.copyPNGHandler = { [weak self] in self?.copyFromContextMenu(.png) }
+        webView.copySVGHandler = { [weak self] in self?.copyFromContextMenu(.svg) }
 
         logger.info("MermaidRenderer init complete")
     }
@@ -156,6 +109,46 @@ class MermaidRenderer: NSObject, ObservableObject {
         Task { @MainActor in
             for name in Self.scriptMessageNames {
                 contentController.removeScriptMessageHandler(forName: name)
+            }
+        }
+    }
+
+    func export(_ format: DiagramExportFormat) async throws(ExportError) -> Data {
+        guard canExport else { throw .noDiagram }
+        let revision = renderRevision
+        let exporter = DiagramExporter(webView: webView)
+        let data: Data
+        switch format {
+        case .png:
+            data = try await exporter.copyAsPNG().get()
+        case .svg:
+            data = try await exporter.copySVG().map { Data($0.utf8) }.get()
+        }
+        guard revision == renderRevision, canExport else { throw .previewChanged }
+        return data
+    }
+
+    func copyDiagram(_ format: DiagramExportFormat) async throws(ExportError) {
+        let data = try await export(format)
+        let pasteboard = NSPasteboard.general
+        pasteboard.clearContents()
+        guard pasteboard.setData(data, forType: format.pasteboardType) else {
+            throw .pasteboardWriteFailed
+        }
+        if format == .svg,
+            !pasteboard.setString(String(decoding: data, as: UTF8.self), forType: .string)
+        {
+            throw .pasteboardWriteFailed
+        }
+    }
+
+    private func copyFromContextMenu(_ format: DiagramExportFormat) {
+        Task { [weak self] in
+            guard let self else { return }
+            do throws(ExportError) {
+                try await copyDiagram(format)
+            } catch {
+                exportErrorHandler?(error)
             }
         }
     }

@@ -1,6 +1,6 @@
+import AppKit
 import SwiftUI
 import WebKit
-import AppKit
 
 private enum Constants {
     static let zoomButtonSpacing: CGFloat = 6
@@ -8,11 +8,6 @@ private enum Constants {
     static let themePickerSpacing: CGFloat = 4
     static let toolbarHorizontalPadding: CGFloat = 12
     static let toolbarVerticalPadding: CGFloat = 6
-    static let errorMessageHorizontalPadding: CGFloat = 10
-    static let errorMessageVerticalPadding: CGFloat = 6
-    static let errorMessageBackgroundOpacity: Double = 0.9
-    static let errorMessageOuterPadding: CGFloat = 12
-    static let errorMessageCornerRadius: CGFloat = 6
 }
 
 struct PreviewPane: View {
@@ -21,34 +16,35 @@ struct PreviewPane: View {
     var body: some View {
         VStack(spacing: 0) {
             toolbar
-            
+
             ZStack {
                 Color(nsColor: .textBackgroundColor)
 
-                switch renderer.state {
-                case .idle:
-                    Text("Type Mermaid syntax to see preview")
-                        .foregroundStyle(.secondary)
+                MermaidWebView(renderer: renderer)
 
-                case .rendering, .ready:
-                    MermaidWebView(renderer: renderer)
+                if !renderer.hasDiagram {
+                    if renderer.state == .rendering {
+                        ProgressView("Rendering diagram…")
+                    } else {
+                        ContentUnavailableView(
+                            "Diagram Preview", systemImage: "point.3.connected.trianglepath.dotted",
+                            description: Text("Start typing or choose File > New from Template.")
+                        )
+                    }
+                }
 
-                case .failure(error: let error):
-                    MermaidWebView(renderer: renderer)
-                    Text(error.message)
+                if renderer.isPreviewStale {
+                    Text("Previous preview. Refresh or fix the source to update it.")
                         .font(.caption)
-                        .foregroundStyle(.white)
-                        .padding(.horizontal, Constants.errorMessageHorizontalPadding)
-                        .padding(.vertical, Constants.errorMessageVerticalPadding)
-                        .background(Color.red.opacity(Constants.errorMessageBackgroundOpacity))
-                        .clipShape(RoundedRectangle(cornerRadius: Constants.errorMessageCornerRadius))
-                        .padding(Constants.errorMessageOuterPadding)
-                        .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
+                        .padding(8)
+                        .background(.regularMaterial, in: RoundedRectangle(cornerRadius: 6))
+                        .padding(10)
+                        .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .bottom)
                 }
             }
         }
     }
-    
+
     private var toolbar: some View {
         HStack {
             HStack(spacing: Constants.zoomButtonSpacing) {
@@ -59,7 +55,7 @@ struct PreviewPane: View {
                 }
                 .help("Zoom Out")
                 .accessibilityLabel("Zoom Out")
-                
+
                 Button {
                     renderer.zoomIn()
                 } label: {
@@ -67,7 +63,7 @@ struct PreviewPane: View {
                 }
                 .help("Zoom In")
                 .accessibilityLabel("Zoom In")
-                
+
                 Button {
                     renderer.resetZoom()
                 } label: {
@@ -85,12 +81,12 @@ struct PreviewPane: View {
             }
 
             Spacer()
-            
+
             HStack(spacing: Constants.themePickerSpacing) {
                 Text("Theme:")
                     .foregroundStyle(.secondary)
                     .font(.caption)
-                
+
                 Picker("Theme", selection: $renderer.theme) {
                     ForEach(MermaidTheme.allCases, id: \.self) { theme in
                         Text(theme.label).tag(theme)

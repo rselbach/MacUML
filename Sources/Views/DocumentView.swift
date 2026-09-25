@@ -1,60 +1,131 @@
 import AppKit
 import SwiftUI
 
-private enum Constants {
-    static let editorMinWidth: CGFloat = 300
-    static let previewMinWidth: CGFloat = 300
-    static let windowMinWidth: CGFloat = 700
-    static let windowMinHeight: CGFloat = 500
-    static let errorBarSpacing: CGFloat = 6
-    static let errorBarHorizontalPadding: CGFloat = 8
-    static let errorBarVerticalPadding: CGFloat = 4
-    static let errorBarBackgroundOpacity: Double = 0.85
-    static let largeFileLineThreshold: Int = 5000
-}
-
 struct DocumentView: View {
     @Binding var document: MermaidDocument
+    var fileURL: URL? = nil
     @StateObject private var renderer = MermaidRenderer()
     @StateObject private var settings = AppSettings.shared
-
-    @State private var errorLine: Int?
-    @State private var cachedLineCount: Int = 0
+    @State private var editorActions = EditorActions()
+    @State private var cachedLineCount = 0
+    @State private var exportError: String?
+    @State private var isExporting = false
 
     var body: some View {
-        HSplitView {
-            VStack(spacing: 0) {
+        VStack(spacing: 0) {
+            HSplitView {
                 EditorView(
                     text: $document.text,
                     lineCount: $cachedLineCount,
-                    errorLine: errorLine,
+                    errorLine: renderer.state.error?.line,
                     editorFont: settings.editorFont,
-                    showLineNumbers: settings.showLineNumbers
+                    showLineNumbers: settings.showLineNumbers,
+                    actions: editorActions
                 )
+                .frame(minWidth: 280)
 
-                if let error = renderer.state.error {
-                    ErrorBar(error: error)
-                } else if cachedLineCount >= Constants.largeFileLineThreshold {
-                    LargeFileWarningBar(lineCount: cachedLineCount)
+                PreviewPane(renderer: renderer)
+                    .frame(minWidth: 280)
+            }
+
+            if let error = renderer.state.error {
+                DiagramErrorView(error: error, goToLine: editorActions.revealLine)
+            } else if cachedLineCount >= 5000 {
+                HStack {
+                    Label("\(cachedLineCount.formatted()) lines", systemImage: "speedometer")
+                    Text("Pause the preview to reduce work while editing.")
+                    Spacer()
+                    Button(renderer.isLivePreviewEnabled ? "Pause Preview" : "Resume Preview") {
+                        renderer.isLivePreviewEnabled.toggle()
+                    }
+                }
+                .font(.caption)
+                .padding(8)
+                .background(.orange.opacity(0.1))
+            }
+        }
+        .frame(minWidth: 600, minHeight: 400)
+        .toolbar {
+            Menu {
+                ExportButtons(actions: exportActions)
+            } label: {
+                HStack {
+                    Image(systemName: "square.and.arrow.up")
+                    Text("Export")
                 }
             }
-            .frame(minWidth: Constants.editorMinWidth)
-
-            PreviewPane(renderer: renderer)
-                .frame(minWidth: Constants.previewMinWidth)
+            .accessibilityLabel("Export Diagram")
+            .disabled(!exportActions.isEnabled)
+            .help("Export the complete current diagram as SVG or PNG")
+            if isExporting {
+                ProgressView().controlSize(.small).accessibilityLabel("Exporting diagram")
+            }
         }
-        .frame(minWidth: Constants.windowMinWidth, minHeight: Constants.windowMinHeight)
         .focusedSceneValue(\.renderer, renderer)
         .focusedSceneValue(\.formatDocument, formatDocument)
-        .onChange(of: document.text) { _, newValue in
-            renderer.render(source: newValue)
+        .focusedSceneValue(\.exportDiagram, exportActions)
+        .onChange(of: document.text) { _, source in
+            renderer.render(source: source)
         }
-        .onChange(of: renderer.state.error) { _, newError in
-            errorLine = newError?.line
+        .onChange(of: renderer.state.error) { _, error in
+            guard let error, let window = editorActions.textView?.window else { return }
+            let message = error.line.map { "Diagram error on line \($0)" } ?? "Diagram preview unavailable"
+            NSAccessibility.post(
+                element: window, notification: .announcementRequested,
+                userInfo: [
+                    .announcement: message,
+                    .priority: NSAccessibilityPriorityLevel.medium.rawValue,
+                ])
         }
         .onAppear {
             cachedLineCount = Self.lineCount(in: document.text)
+            renderer.exportErrorHandler = { [errorState = $exportError] error in
+                errorState.wrappedValue = error.localizedDescription
+            }
             renderer.render(source: document.text)
+        }
+        .onDisappear { renderer.exportErrorHandler = nil }
+        .alert(
+            "Couldn’t Export Diagram",
+            isPresented: Binding(
+                get: { exportError != nil }, set: { if !$0 { exportError = nil } }
+            )
+        ) {
+            Button("OK", role: .cancel) { exportError = nil }
+        } message: {
+            Text(exportError ?? "")
+        }
+    }
+
+    private var exportActions: DocumentExportActions {
+        DocumentExportActions(isEnabled: renderer.canExport && !isExporting, perform: exportDiagram)
+    }
+
+    private func exportDiagram(_ action: DiagramExportAction) {
+        guard renderer.canExport, !isExporting else { return }
+        isExporting = true
+        Task { @MainActor in
+            defer { isExporting = false }
+            do {
+                if !action.writesFile {
+                    try await renderer.copyDiagram(action.format)
+                    return
+                }
+                let data = try await renderer.export(action.format)
+                let panel = NSSavePanel()
+                panel.allowedContentTypes = [action.format.contentType]
+                panel.canCreateDirectories = true
+                panel.directoryURL = fileURL?.deletingLastPathComponent()
+                panel.nameFieldStringValue =
+                    (fileURL?.deletingPathExtension().lastPathComponent ?? "Diagram")
+                    + "." + action.format.rawValue
+                panel.title = action.title
+                guard let window = NSApp.keyWindow else { return }
+                guard await panel.beginSheetModal(for: window) == .OK, let url = panel.url else { return }
+                try data.write(to: url, options: .atomic)
+            } catch {
+                exportError = error.localizedDescription
+            }
         }
     }
 
@@ -69,81 +140,10 @@ struct DocumentView: View {
         var count = 1
         let textLength = text.utf16.count
         var offset = 0
-
         for char in text.utf16 {
             offset += 1
-            if char == 10 && offset < textLength {
-                count += 1
-            }
+            if char == 10 && offset < textLength { count += 1 }
         }
-
         return count
-    }
-}
-
-private struct ErrorBar: View {
-    let error: MermaidError
-
-    var body: some View {
-        HStack(spacing: Constants.errorBarSpacing) {
-            Image(systemName: "exclamationmark.triangle.fill")
-                .foregroundStyle(.white)
-
-            if let line = error.line {
-                Text("Line \(line):")
-                    .fontWeight(.medium)
-            }
-
-            Text(error.message)
-                .lineLimit(3)
-                .truncationMode(.tail)
-
-            Spacer()
-
-            Button("Copy") {
-                let pasteboard = NSPasteboard.general
-                pasteboard.clearContents()
-
-                if let line = error.line {
-                    pasteboard.setString("Line \(line): \(error.message)", forType: .string)
-                    return
-                }
-
-                pasteboard.setString(error.message, forType: .string)
-            }
-            .buttonStyle(.borderless)
-            .foregroundStyle(.white.opacity(0.9))
-            .accessibilityLabel("Copy Error Message")
-        }
-        .font(.caption)
-        .foregroundStyle(.white)
-        .padding(.horizontal, Constants.errorBarHorizontalPadding)
-        .padding(.vertical, Constants.errorBarVerticalPadding)
-        .background(Color.red.opacity(Constants.errorBarBackgroundOpacity))
-        .accessibilityElement(children: .combine)
-        .accessibilityLabel("Diagram Error")
-    }
-}
-
-private struct LargeFileWarningBar: View {
-    let lineCount: Int
-
-    var body: some View {
-        HStack(spacing: Constants.errorBarSpacing) {
-            Image(systemName: "speedometer")
-                .foregroundStyle(.white)
-
-            Text("Large file (\(lineCount.formatted()) lines) — editing may be slower")
-                .lineLimit(1)
-
-            Spacer()
-        }
-        .font(.caption)
-        .foregroundStyle(.white)
-        .padding(.horizontal, Constants.errorBarHorizontalPadding)
-        .padding(.vertical, Constants.errorBarVerticalPadding)
-        .background(Color.orange.opacity(Constants.errorBarBackgroundOpacity))
-        .accessibilityElement(children: .combine)
-        .accessibilityLabel("Large file performance warning")
     }
 }
