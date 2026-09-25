@@ -193,6 +193,68 @@ struct MermaidRendererTests {
         #expect(renderer.canExport)
     }
 
+    @Test("Paused live preview tracks edits until refresh or resume")
+    @MainActor
+    func pausedLivePreviewTracksEdits() async throws {
+        let renderer = MermaidRenderer()
+        renderer.render(source: "flowchart TD\nA[\"Troy\"] --> B[\"Abed\"]")
+        try await waitForRenderCompletion(renderer: renderer, timeout: .seconds(5))
+
+        renderer.isLivePreviewEnabled = false
+        renderer.render(source: "flowchart TD\nA[\"Shirley\"] --> B[\"Annie\"]")
+        try await Task.sleep(for: .milliseconds(400))
+
+        let pausedText =
+            try await renderer.webView.evaluateJavaScript(
+                "document.querySelector('#diagram svg')?.textContent ?? ''"
+            ) as? String
+        #expect(pausedText?.contains("Troy") == true)
+        #expect(pausedText?.contains("Shirley") == false)
+        #expect(renderer.state == .ready)
+        #expect(renderer.isPreviewStale)
+        #expect(!renderer.canExport)
+
+        renderer.refreshCurrentSource()
+        try await waitForRenderCompletion(renderer: renderer, timeout: .seconds(5))
+        let refreshedText =
+            try await renderer.webView.evaluateJavaScript(
+                "document.querySelector('#diagram svg')?.textContent ?? ''"
+            ) as? String
+        #expect(refreshedText?.contains("Shirley") == true)
+        #expect(renderer.canExport)
+
+        renderer.render(source: "flowchart TD\nA[\"Pierce\"] --> B[\"Britta\"]")
+        #expect(renderer.isPreviewStale)
+        renderer.isLivePreviewEnabled = true
+        try await waitForRenderCompletion(renderer: renderer, timeout: .seconds(5))
+        let resumedText =
+            try await renderer.webView.evaluateJavaScript(
+                "document.querySelector('#diagram svg')?.textContent ?? ''"
+            ) as? String
+        #expect(resumedText?.contains("Pierce") == true)
+        #expect(renderer.canExport)
+    }
+
+    @Test("Paused live preview still clears empty source")
+    @MainActor
+    func pausedLivePreviewClearsEmptySource() async throws {
+        let renderer = MermaidRenderer()
+        renderer.render(source: "flowchart TD\nA --> B")
+        try await waitForRenderCompletion(renderer: renderer, timeout: .seconds(5))
+
+        renderer.isLivePreviewEnabled = false
+        renderer.render(source: "")
+        try await waitForState(renderer: renderer, timeout: .seconds(5)) { !$0.hasDiagram }
+
+        let hasSVG =
+            try await renderer.webView.evaluateJavaScript(
+                "document.querySelector('#diagram svg') !== null"
+            ) as? Bool
+        #expect(hasSVG == false)
+        #expect(renderer.state == .idle)
+        #expect(!renderer.canExport)
+    }
+
     @Test("Web content process recovery restores source theme and zoom")
     @MainActor
     func processRecoveryRestoresRenderer() async throws {

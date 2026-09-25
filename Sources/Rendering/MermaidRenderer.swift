@@ -26,6 +26,17 @@ class MermaidRenderer: NSObject, ObservableObject {
     @Published private(set) var hasDiagram = false
     @Published private(set) var isPreviewStale = false
     @Published private(set) var canExport = false
+    @Published var isLivePreviewEnabled = true {
+        didSet {
+            guard oldValue != isLivePreviewEnabled else { return }
+            if isLivePreviewEnabled {
+                refreshCurrentSource()
+            } else {
+                renderTask?.cancel()
+                state = hasDiagram ? .ready : .idle
+            }
+        }
+    }
     @Published var theme: MermaidTheme = .auto {
         didSet {
             if oldValue != theme {
@@ -126,9 +137,15 @@ class MermaidRenderer: NSObject, ObservableObject {
         renderRevision &+= 1
         let requestedRevision = renderRevision
         updatePreviewStatus()
-        state = source.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty ? .idle : .rendering
+        let isEmpty = source.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+        state = isEmpty ? .idle : .rendering
 
         renderTask?.cancel()
+
+        guard isLivePreviewEnabled || force || isEmpty else {
+            state = hasDiagram ? .ready : .idle
+            return
+        }
 
         guard mermaidReady else {
             logger.info("Mermaid not ready, queueing render")
@@ -203,6 +220,7 @@ class MermaidRenderer: NSObject, ObservableObject {
                 }
 
                 if var metrics = await validator.fetchMetrics() {
+                    guard !Task.isCancelled, revision == renderRevision else { return }
                     guard metrics.hasSVG else {
                         let message = "Render reported success, but no SVG was found in preview."
                         logger.error("\(message, privacy: .public)")
@@ -225,6 +243,7 @@ class MermaidRenderer: NSObject, ObservableObject {
                         {
                             metrics = retry
                         }
+                        guard !Task.isCancelled, revision == renderRevision else { return }
                     }
 
                     if viewHasSize && (metrics.width <= 1 || metrics.height <= 1) {
@@ -235,6 +254,7 @@ class MermaidRenderer: NSObject, ObservableObject {
                     }
                 }
 
+                guard !Task.isCancelled, revision == renderRevision else { return }
                 logger.info("Render succeeded")
                 successfulRevision = revision
                 updatePreviewStatus()
