@@ -40,6 +40,19 @@ struct CodeTextViewTests {
         #expect(textView.selectedRange() == NSRange(location: 0, length: 0))
     }
 
+    @Test("Editing text rebuilds line offsets")
+    func editingTextRebuildsLineOffsets() {
+        let textView = CodeTextView()
+        textView.string = "Troy\nAbed"
+        textView.applyInitialHighlighting()
+        textView.setSelectedRange(NSRange(location: 4, length: 0))
+
+        textView.insertText("\nShirley", replacementRange: textView.selectedRange())
+
+        #expect(textView.string == "Troy\nShirley\nAbed")
+        #expect(textView.lineStartOffsets == [0, 5, 13])
+    }
+
     @Test("Indenting a selected document preserves its final newline")
     func indentPreservesFinalNewline() {
         let textView = CodeTextView()

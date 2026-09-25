@@ -16,12 +16,7 @@ final class CodeTextView: NSTextView {
 
     override func didChangeText() {
         super.didChangeText()
-        let currentString = string
-        if let storage = textStorage {
-            updateLineStartOffsetsIncrementally(using: storage, currentString: currentString)
-        } else {
-            rebuildLineStartOffsets(for: currentString)
-        }
+        rebuildLineStartOffsets(for: string)
         queueIncrementalHighlightRange()
         scheduleHighlighting()
     }
@@ -43,110 +38,6 @@ final class CodeTextView: NSTextView {
             }
         }
         lineStartOffsets = offsets
-    }
-
-    private func updateLineStartOffsetsIncrementally(using storage: NSTextStorage, currentString: String) {
-        guard !lineStartOffsets.isEmpty else {
-            rebuildLineStartOffsets(for: currentString)
-            return
-        }
-
-        let editedRange = storage.editedRange
-        guard editedRange.location != NSNotFound,
-              editedRange.location <= storage.length else {
-            rebuildLineStartOffsets(for: currentString)
-            return
-        }
-
-        let changeInLength = storage.changeInLength
-        let newEditedLength = editedRange.length
-        let oldEditedLength = newEditedLength - changeInLength
-        guard oldEditedLength >= 0 else {
-            rebuildLineStartOffsets(for: currentString)
-            return
-        }
-
-        let previousTextLength = storage.length - changeInLength
-        guard previousTextLength >= 0 else {
-            rebuildLineStartOffsets(for: currentString)
-            return
-        }
-
-        let oldEditEnd = editedRange.location + oldEditedLength
-        guard oldEditEnd <= previousTextLength else {
-            rebuildLineStartOffsets(for: currentString)
-            return
-        }
-
-        let newTextLength = storage.length
-        let safeLocation = min(editedRange.location, newTextLength)
-
-        let startIndex = lineIndex(atOrBefore: safeLocation)
-        let recalcStart = lineStartOffsets[startIndex]
-
-        let suffixStartIndex = firstLineIndex(greaterThan: oldEditEnd)
-        let oldRecalcEnd = suffixStartIndex < lineStartOffsets.count
-            ? lineStartOffsets[suffixStartIndex]
-            : previousTextLength
-
-        let newRecalcEnd = max(recalcStart, min(newTextLength, oldRecalcEnd + changeInLength))
-
-        var updatedOffsets = Array(lineStartOffsets.prefix(startIndex + 1))
-        updatedOffsets.append(contentsOf: lineStarts(in: currentString, from: recalcStart, to: newRecalcEnd))
-
-        if suffixStartIndex < lineStartOffsets.count {
-            for offset in lineStartOffsets[suffixStartIndex...] {
-                let shifted = offset + changeInLength
-                if shifted > recalcStart && shifted < newTextLength {
-                    if updatedOffsets.last != shifted {
-                        updatedOffsets.append(shifted)
-                    }
-                }
-            }
-        }
-
-        if updatedOffsets.first != 0 {
-            updatedOffsets.insert(0, at: 0)
-        }
-        lineStartOffsets = updatedOffsets
-    }
-
-    private func lineStarts(in text: String, from start: Int, to end: Int) -> [Int] {
-        guard start < end else {
-            return []
-        }
-
-        let nsText = text as NSString
-        let safeStart = min(max(0, start), nsText.length)
-        let safeEnd = min(max(safeStart, end), nsText.length)
-        guard safeStart < safeEnd else {
-            return []
-        }
-
-        let segment = nsText.substring(with: NSRange(location: safeStart, length: safeEnd - safeStart))
-        let utf16 = segment.utf16
-        let newline: UTF16.CodeUnit = 10
-
-        var starts: [Int] = []
-        starts.reserveCapacity(max(1, utf16.count / 40))
-
-        var offset = safeStart
-        for char in utf16 {
-            offset += 1
-            if char == newline && offset < nsText.length {
-                starts.append(offset)
-            }
-        }
-
-        return starts
-    }
-
-    private func lineIndex(atOrBefore position: Int) -> Int {
-        max(0, Self.firstIndex(greaterThan: position, in: lineStartOffsets) - 1)
-    }
-
-    private func firstLineIndex(greaterThan position: Int) -> Int {
-        Self.firstIndex(greaterThan: position, in: lineStartOffsets)
     }
 
     static func firstIndex(greaterThan value: Int, in offsets: [Int]) -> Int {
