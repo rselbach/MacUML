@@ -103,6 +103,7 @@ struct DocumentView: View {
 
     private func exportDiagram(_ action: DiagramExportAction) {
         guard renderer.canExport, !isExporting else { return }
+        let presentingWindow = editorActions.textView?.window ?? renderer.webView.window
         isExporting = true
         Task { @MainActor in
             defer { isExporting = false }
@@ -111,7 +112,6 @@ struct DocumentView: View {
                     try await renderer.copyDiagram(action.format)
                     return
                 }
-                let data = try await renderer.export(action.format)
                 let panel = NSSavePanel()
                 panel.allowedContentTypes = [action.format.contentType]
                 panel.canCreateDirectories = true
@@ -120,8 +120,12 @@ struct DocumentView: View {
                     (fileURL?.deletingPathExtension().lastPathComponent ?? "Diagram")
                     + "." + action.format.rawValue
                 panel.title = action.title
-                guard let window = NSApp.keyWindow else { return }
+                guard let window = presentingWindow else {
+                    exportError = "The document window is no longer available. Reopen the document and try again."
+                    return
+                }
                 guard await panel.beginSheetModal(for: window) == .OK, let url = panel.url else { return }
+                let data = try await renderer.export(action.format)
                 try data.write(to: url, options: .atomic)
             } catch {
                 exportError = error.localizedDescription
