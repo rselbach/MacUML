@@ -1,16 +1,18 @@
-import SwiftUI
 import AppKit
 import Sparkle
+import SwiftUI
 
 class AppDelegate: NSObject, NSApplicationDelegate, ObservableObject {
     @Published var updaterController: SPUStandardUpdaterController?
-    
+
     func applicationDidFinishLaunching(_ notification: Notification) {
-        updaterController = SPUStandardUpdaterController(
-            startingUpdater: true,
-            updaterDelegate: nil,
-            userDriverDelegate: nil
-        )
+        #if !DEBUG
+            updaterController = SPUStandardUpdaterController(
+                startingUpdater: true,
+                updaterDelegate: nil,
+                userDriverDelegate: nil
+            )
+        #endif
     }
 }
 
@@ -62,11 +64,11 @@ struct MacUMLApp: App {
                 .disabled(renderer == nil)
             }
         }
-        
+
         Settings {
             SettingsView()
         }
-        
+
         Window("About MacUML", id: "about") {
             AboutWindowContent()
                 .environmentObject(appDelegate)
@@ -79,7 +81,7 @@ struct MacUMLApp: App {
 
 struct AboutCommand: Commands {
     @Environment(\.openWindow) private var openWindow
-    
+
     var body: some Commands {
         CommandGroup(replacing: .appInfo) {
             Button("About MacUML") {
@@ -91,7 +93,7 @@ struct AboutCommand: Commands {
 
 struct CheckForUpdatesCommand: Commands {
     let updater: SPUUpdater?
-    
+
     var body: some Commands {
         CommandGroup(after: .appInfo) {
             if let updater {
@@ -106,7 +108,7 @@ struct CheckForUpdatesCommand: Commands {
 
 struct AboutWindowContent: View {
     @EnvironmentObject private var appDelegate: AppDelegate
-    
+
     var body: some View {
         AboutView(updater: appDelegate.updaterController?.updater)
     }
