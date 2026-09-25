@@ -158,6 +158,8 @@ jobs:
             --entitlements Sources/Entitlements.plist \
             .build/release-bundle/MacUML.app
 
+          ./scripts/verify-entitlements.sh .build/release-bundle/MacUML.app
+
       - name: Create DMG
         env:
           APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}

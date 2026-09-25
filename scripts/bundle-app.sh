@@ -51,15 +51,19 @@ sign_bundle() {
   local contents="${bundle}/Contents"
   local framework="${contents}/Frameworks/Sparkle.framework"
   local executable="${contents}/MacOS/${APP_NAME}"
+  local entitlements="${PROJECT_ROOT}/Sources/Entitlements.plist"
   local identity="-"
 
   [[ -d "${framework}" ]] || err "missing Sparkle.framework at ${framework}"
   [[ -f "${executable}" ]] || err "missing executable at ${executable}"
+  [[ -f "${entitlements}" ]] || err "missing entitlements at ${entitlements}"
 
   # Signing order matters for nested app bundles/frameworks.
   codesign --force --deep --sign "${identity}" --timestamp=none "${framework}"
-  codesign --force --sign "${identity}" --timestamp=none "${executable}"
-  codesign --force --sign "${identity}" --timestamp=none "${bundle}"
+  codesign --force --sign "${identity}" --timestamp=none \
+    --entitlements "${entitlements}" "${executable}"
+  codesign --force --sign "${identity}" --timestamp=none \
+    --entitlements "${entitlements}" "${bundle}"
 }
 
 create_bundle() {
@@ -107,6 +111,7 @@ create_bundle() {
 
   printf 'APPL????' > "${contents}/PkgInfo"
   sign_bundle "${bundle}"
+  "${PROJECT_ROOT}/scripts/verify-entitlements.sh" "${bundle}"
 
   echo "Built: ${bundle}"
 }
