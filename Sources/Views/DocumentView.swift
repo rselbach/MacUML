@@ -123,7 +123,7 @@ struct DocumentView: View {
     }
 
     private var layoutBinding: Binding<DocumentLayout> {
-        Binding(get: { layout }, set: changeLayout)
+        Binding(get: { layout }, set: { changeLayout($0) })
     }
 
     private func changeLayout(_ mode: DocumentLayout) {
