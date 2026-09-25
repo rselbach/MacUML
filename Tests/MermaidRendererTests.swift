@@ -255,6 +255,25 @@ struct MermaidRendererTests {
         #expect(!renderer.canExport)
     }
 
+    @Test("Manual refresh reloads an unavailable runtime")
+    @MainActor
+    func refreshReloadsUnavailableRuntime() async throws {
+        let renderer = MermaidRenderer()
+        renderer.render(source: "flowchart TD\nTroy --> Abed")
+        try await waitForRenderCompletion(renderer: renderer, timeout: .seconds(5))
+        _ = try await renderer.webView.evaluateJavaScript("window.renderDiagram = undefined;")
+        renderer.mermaidReady = false
+        renderer.state = .failure(error: MermaidError(message: "Preview runtime did not initialize", line: nil))
+
+        renderer.refreshCurrentSource()
+        try await waitForRenderCompletion(renderer: renderer, timeout: .seconds(8))
+
+        #expect(renderer.canExport)
+        let text = try await renderer.webView.evaluateJavaScript("document.querySelector('#diagram svg').textContent")
+        #expect((text as? String)?.contains("Troy") == true)
+        #expect((text as? String)?.contains("Abed") == true)
+    }
+
     @Test("Web content process recovery restores source theme and zoom")
     @MainActor
     func processRecoveryRestoresRenderer() async throws {

@@ -154,6 +154,11 @@ class MermaidRenderer: NSObject, ObservableObject {
     }
 
     func refreshCurrentSource() {
+        guard mermaidReady else {
+            recoveryAttempts = 0
+            reloadRuntime()
+            return
+        }
         render(source: lastSource, force: true)
     }
 
@@ -364,6 +369,10 @@ class MermaidRenderer: NSObject, ObservableObject {
 
         recoveryAttempts += 1
         logger.error("Recovering preview renderer after: \(message, privacy: .public)")
+        reloadRuntime()
+    }
+
+    private func reloadRuntime() {
         renderTask?.cancel()
         validator.cancelValidation()
         mermaidReady = false
