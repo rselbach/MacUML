@@ -6,16 +6,19 @@ import os
 class DiagramWebView: WKWebView {
     var copyPNGHandler: (() -> Void)?
     var copySVGHandler: (() -> Void)?
+    var canCopyHandler: (() -> Bool)?
 
     override func willOpenMenu(_ menu: NSMenu, with event: NSEvent) {
         menu.removeAllItems()
 
         let pngItem = NSMenuItem(title: "Copy as PNG", action: #selector(handleCopyPNG), keyEquivalent: "")
         pngItem.target = self
+        pngItem.isEnabled = canCopyHandler?() ?? false
         menu.addItem(pngItem)
 
         let svgItem = NSMenuItem(title: "Copy as SVG", action: #selector(handleCopySVG), keyEquivalent: "")
         svgItem.target = self
+        svgItem.isEnabled = canCopyHandler?() ?? false
         menu.addItem(svgItem)
 
         super.willOpenMenu(menu, with: event)

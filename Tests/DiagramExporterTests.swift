@@ -1,151 +1,199 @@
+import AppKit
 import Foundation
 import Testing
+
 @testable import MacUML
 
 @Suite("DiagramExporter Tests")
 struct DiagramExporterTests {
-
+    @Test("PNG export succeeds with complete labeled content")
     @MainActor
-    private func waitForRenderCompletion(
-        renderer: MermaidRenderer,
-        timeout: Duration
-    ) async throws {
-        let clock = ContinuousClock()
-        let deadline = clock.now + timeout
+    func pngExportSucceeds() async throws {
+        let renderer = MermaidRenderer()
+        renderer.render(source: "flowchart LR\nA[\"Troy Barnes\"] --> B[\"Greendale Community College\"]")
+        try await waitForRenderCompletion(renderer: renderer, timeout: .seconds(5))
 
-        repeat {
-            switch renderer.state {
-            case .ready:
-                return
-            case .failure(let error):
-                Issue.record("Renderer failed: \(error.message)")
-                return
-            default:
-                if clock.now >= deadline {
-                    Issue.record("Render timed out after \(timeout) - state: \(renderer.state)")
-                    return
-                }
-                try await Task.sleep(for: .milliseconds(50))
+        let data = try requireSuccess(await DiagramExporter(webView: renderer.webView).copyAsPNG())
+        let bitmap = try #require(NSBitmapImageRep(data: data))
+
+        #expect(bitmap.pixelsWide > 100)
+        #expect(bitmap.pixelsHigh > 20)
+        #expect(nonTransparentPixelCount(in: bitmap) > 100)
+
+        renderer.render(source: "flowchart LR\nA[\"Shirley Bennett\"] --> B[\"Study Room F\"]")
+        try await waitForRenderCompletion(renderer: renderer, timeout: .seconds(5))
+        let changedLabelsData = try requireSuccess(await DiagramExporter(webView: renderer.webView).copyAsPNG())
+        #expect(changedLabelsData != data)
+    }
+
+    @Test("PNG padding changes intrinsic dimensions")
+    @MainActor
+    func pngPaddingChangesDimensions() async throws {
+        let renderer = MermaidRenderer()
+        renderer.render(source: "flowchart TD\nA[\"Troy\"] --> B[\"Abed\"]")
+        try await waitForRenderCompletion(renderer: renderer, timeout: .seconds(5))
+
+        let exporter = DiagramExporter(webView: renderer.webView)
+        let unpadded = try #require(NSBitmapImageRep(data: requireSuccess(await exporter.copyAsPNG(padding: 0))))
+        let padded = try #require(NSBitmapImageRep(data: requireSuccess(await exporter.copyAsPNG(padding: 32))))
+
+        #expect(padded.pixelsWide == unpadded.pixelsWide + 64)
+        #expect(padded.pixelsHigh == unpadded.pixelsHigh + 64)
+    }
+
+    @Test("Exports are independent of preview zoom and pan")
+    @MainActor
+    func exportsIgnoreViewportTransform() async throws {
+        let renderer = MermaidRenderer()
+        renderer.render(source: "flowchart TD\nA[\"Troy\"] --> B[\"Abed\"] --> C[\"Annie\"]")
+        try await waitForRenderCompletion(renderer: renderer, timeout: .seconds(5))
+
+        let exporter = DiagramExporter(webView: renderer.webView)
+        renderer.setZoom(0.5)
+        _ = try await renderer.webView.evaluateJavaScript("window.setPan(40, -25);")
+        let smallZoomSVG = try requireSuccess(await exporter.copySVG())
+        let smallZoomPNG = try requireSuccess(await exporter.copyAsPNG())
+
+        renderer.setZoom(2.0)
+        _ = try await renderer.webView.evaluateJavaScript("window.setPan(-75, 60);")
+        let largeZoomSVG = try requireSuccess(await exporter.copySVG())
+        let largeZoomPNG = try requireSuccess(await exporter.copyAsPNG())
+
+        #expect(smallZoomSVG == largeZoomSVG)
+        #expect(smallZoomPNG == largeZoomPNG)
+    }
+
+    @Test("SVG export preserves labels for representative Mermaid diagrams")
+    @MainActor
+    func svgExportPreservesLabels() async throws {
+        let fixtures: [(source: String, labels: [String])] = [
+            (
+                "flowchart TD\nA[\"Syntax error\"] --> B[\"Parse error\"]",
+                ["Syntax error", "Parse error"]
+            ),
+            (
+                "classDiagram\nclass StudyGroup\nclass Troy\nStudyGroup --> Troy : includes",
+                ["StudyGroup", "Troy", "includes"]
+            ),
+            (
+                "sequenceDiagram\nparticipant T as Troy\nparticipant A as Abed\nT->>A: Cool cool cool",
+                ["Troy", "Abed", "Cool cool cool"]
+            ),
+        ]
+        let renderer = MermaidRenderer()
+        let exporter = DiagramExporter(webView: renderer.webView)
+
+        for fixture in fixtures {
+            renderer.render(source: fixture.source)
+            try await waitForRenderCompletion(renderer: renderer, timeout: .seconds(5))
+            let svg = try requireSuccess(await exporter.copySVG())
+            for label in fixture.labels {
+                #expect(svg.contains(label), "SVG should preserve label: \(label)")
             }
-        } while true
+            #expect(svg.contains("viewBox="))
+            #expect(svg.contains("width="))
+            #expect(svg.contains("height="))
+
+            let svgDocument = try XMLDocument(data: Data(svg.utf8))
+            #expect(svgDocument.rootElement()?.name?.lowercased() == "svg")
+
+            let png = try requireSuccess(await exporter.copyAsPNG())
+            let bitmap = try #require(NSBitmapImageRep(data: png))
+            #expect(bitmap.pixelsWide > 20)
+            #expect(bitmap.pixelsHigh > 20)
+            #expect(nonTransparentPixelCount(in: bitmap) > 100)
+        }
     }
 
-    @Test("copyAsPNG returns failure in headless test environment")
+    @Test("Exports fail when no current diagram exists")
     @MainActor
-    func copyAsPNGInHeadlessEnvironment() async throws {
+    func exportsFailWithoutDiagram() async {
         let renderer = MermaidRenderer()
-        renderer.render(source: "flowchart TD\nA-->B")
-
-        try await waitForRenderCompletion(renderer: renderer, timeout: .seconds(5))
-
         let exporter = DiagramExporter(webView: renderer.webView)
-        let result = await exporter.copyAsPNG()
+        await waitForRuntimeReady(renderer: renderer, timeout: .seconds(5))
 
-        guard case .failure(let error) = result else {
-            Issue.record("Expected failure in headless environment but got success")
+        #expect(await exporter.copyAsPNG() == .failure(.noDiagram))
+        #expect(await exporter.copySVG() == .failure(.svgNotFound))
+    }
+
+    @Test("Context export reports disabled-action errors")
+    @MainActor
+    func contextExportReportsError() async {
+        let renderer = MermaidRenderer()
+        var receivedError: ExportError?
+        renderer.exportErrorHandler = { receivedError = $0 }
+
+        renderer.webView.copyPNGHandler?()
+        let clock = ContinuousClock()
+        let deadline = clock.now + .seconds(2)
+        while receivedError == nil && clock.now < deadline {
+            await Task.yield()
+        }
+
+        #expect(receivedError == .noDiagram)
+        #expect(renderer.webView.canCopyHandler?() == false)
+    }
+
+}
+
+@MainActor
+private func waitForRuntimeReady(renderer: MermaidRenderer, timeout: Duration) async {
+    let clock = ContinuousClock()
+    let deadline = clock.now + timeout
+    while !renderer.mermaidReady && clock.now < deadline {
+        do {
+            try await Task.sleep(for: .milliseconds(50))
+        } catch {
             return
         }
-
-        #expect(error != .noDiagram)
     }
+    #expect(renderer.mermaidReady)
+}
 
-    @Test("copyAsPNG returns failure with no diagram")
-    @MainActor
-    func copyAsPNGWithNoDiagram() async throws {
-        let renderer = MermaidRenderer()
-        // Empty source clears the diagram
-        renderer.render(source: "")
-
-        try await Task.sleep(for: .milliseconds(400))
-
-        let exporter = DiagramExporter(webView: renderer.webView)
-        let result = await exporter.copyAsPNG()
-
-        #expect(result == .failure(.noDiagram))
+private func requireSuccess<T>(_ result: Result<T, ExportError>) throws -> T {
+    switch result {
+    case .success(let value):
+        return value
+    case .failure(let error):
+        Issue.record("Export failed: \(error.localizedDescription)")
+        throw error
     }
+}
 
-    @Test("copySVG returns valid SVG string when present")
-    @MainActor
-    func copySVGWithDiagram() async throws {
-        let renderer = MermaidRenderer()
-        renderer.render(source: "flowchart TD\nA-->B")
-
-        try await waitForRenderCompletion(renderer: renderer, timeout: .seconds(5))
-
-        let exporter = DiagramExporter(webView: renderer.webView)
-        let result = await exporter.copySVG()
-
-        if case .success(let svg) = result {
-            #expect(!svg.isEmpty, "SVG should not be empty string")
-            #expect(svg.contains("<svg"), "SVG should contain <svg tag")
-        } else if case .failure(let error) = result {
-            Issue.record("SVG extraction failed: \(error.errorDescription ?? "unknown")")
+private func nonTransparentPixelCount(in bitmap: NSBitmapImageRep) -> Int {
+    var count = 0
+    let step = max(1, min(bitmap.pixelsWide, bitmap.pixelsHigh) / 50)
+    for y in stride(from: 0, to: bitmap.pixelsHigh, by: step) {
+        for x in stride(from: 0, to: bitmap.pixelsWide, by: step) {
+            if let color = bitmap.colorAt(x: x, y: y), color.alphaComponent > 0.01 {
+                count += 1
+            }
         }
     }
+    return count
+}
 
-    @Test("copySVG returns failure when no diagram")
-    @MainActor
-    func copySVGWithNoDiagram() async throws {
-        let renderer = MermaidRenderer()
-        // Empty source clears the diagram
-        renderer.render(source: "")
+@MainActor
+private func waitForRenderCompletion(
+    renderer: MermaidRenderer,
+    timeout: Duration
+) async throws {
+    let clock = ContinuousClock()
+    let deadline = clock.now + timeout
 
-        try await Task.sleep(for: .milliseconds(400))
-
-        let exporter = DiagramExporter(webView: renderer.webView)
-        let result = await exporter.copySVG()
-
-        if case .failure(let error) = result {
-            #expect(error == .svgNotFound, "Should report SVG not found")
-        } else {
-            Issue.record("Expected failure but got success: \(result)")
-        }
-    }
-
-    @Test("copySVG returns failure when no diagram in DOM")
-    @MainActor
-    func copySVGWithEmptyDiagram() async throws {
-        let renderer = MermaidRenderer()
-        renderer.render(source: "   ")
-
-        try await Task.sleep(for: .milliseconds(400))
-
-        let exporter = DiagramExporter(webView: renderer.webView)
-        let result = await exporter.copySVG()
-
-        if case .failure(let error) = result {
-            #expect(error == .svgNotFound)
-        } else {
-            Issue.record("Expected failure but got success: \(result)")
-        }
-    }
-
-    @Test("PNG export respects padding parameter in implementation")
-    @MainActor
-    func copyAsPNGWithPadding() async throws {
-        let renderer = MermaidRenderer()
-        renderer.render(source: "flowchart TD\nA-->B")
-
-        try await waitForRenderCompletion(renderer: renderer, timeout: .seconds(5))
-
-        let exporter = DiagramExporter(webView: renderer.webView)
-
-        // In headless test environment, WebView snapshots fail
-        // But we can verify the padding parameter is accepted without crashing
-        let resultNoPadding = await exporter.copyAsPNG(padding: 0)
-        let resultWithPadding = await exporter.copyAsPNG(padding: 32)
-
-        guard case .failure(let noPaddingError) = resultNoPadding else {
-            Issue.record("Expected no-padding export failure in headless environment")
+    repeat {
+        switch renderer.state {
+        case .ready:
             return
+        case .failure(let error):
+            Issue.record("Renderer failed: \(error.message)")
+            throw error
+        default:
+            if clock.now >= deadline {
+                Issue.record("Render timed out after \(timeout): \(renderer.state)")
+                return
+            }
+            try await Task.sleep(for: .milliseconds(50))
         }
-
-        guard case .failure(let withPaddingError) = resultWithPadding else {
-            Issue.record("Expected padded export failure in headless environment")
-            return
-        }
-
-        #expect(noPaddingError != .noDiagram)
-        #expect(withPaddingError != .noDiagram)
-    }
+    } while true
 }

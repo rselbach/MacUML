@@ -1,5 +1,6 @@
 window.currentTheme = 'auto';
 window.renderSequence = 0;
+window.exportSVG = null;
 
 function collectUnexpectedBodyNodes() {
     const diagram = document.getElementById('diagram');
@@ -117,6 +118,7 @@ window.setTheme = async function(theme) {
 
 window.clearDiagram = function() {
     window.renderSequence += 1;
+    window.exportSVG = null;
     const container = document.getElementById('diagram');
     container.innerHTML = '';
     window.panX = 0;
@@ -318,6 +320,7 @@ function initInteractions() {
 
 window.renderDiagram = async function(source) {
     const renderSequence = ++window.renderSequence;
+    window.exportSVG = null;
     const container = document.getElementById('diagram');
     const tempContainer = document.createElement('div');
     tempContainer.style.position = 'fixed';
@@ -338,6 +341,7 @@ window.renderDiagram = async function(source) {
         }
 
         if (svg) {
+            window.exportSVG = svg;
             container.innerHTML = '<div class="pan-inner"><div class="zoom-inner">' + svg + '</div></div>';
             updateInteractionState();
             applyPan();
@@ -379,6 +383,83 @@ window.renderDiagram = async function(source) {
         tempContainer.remove();
         cleanupUnexpectedBodyNodes('render-finally');
     }
+};
+
+function normalizedExportSVG(padding) {
+    if (!window.exportSVG) return null;
+
+    const document = new DOMParser().parseFromString(window.exportSVG, 'image/svg+xml');
+    const svg = document.documentElement;
+    if (!svg || svg.nodeName.toLowerCase() !== 'svg' || document.querySelector('parsererror')) {
+        return null;
+    }
+
+    const viewBox = (svg.getAttribute('viewBox') || '').trim().split(/[\s,]+/).map(Number);
+    if (viewBox.length !== 4 || viewBox.some((value) => !Number.isFinite(value)) ||
+        viewBox[2] <= 0 || viewBox[3] <= 0) {
+        return null;
+    }
+
+    const safePadding = Number.isFinite(padding) ? Math.max(0, padding) : 0;
+    const width = viewBox[2] + (safePadding * 2);
+    const height = viewBox[3] + (safePadding * 2);
+    svg.setAttribute(
+        'viewBox',
+        [viewBox[0] - safePadding, viewBox[1] - safePadding, width, height].join(' ')
+    );
+    svg.setAttribute('width', String(width));
+    svg.setAttribute('height', String(height));
+    svg.style.removeProperty('max-width');
+    svg.style.removeProperty('max-height');
+    svg.style.removeProperty('width');
+    svg.style.removeProperty('height');
+
+    return {
+        svg: new XMLSerializer().serializeToString(svg),
+        width: Math.ceil(width),
+        height: Math.ceil(height)
+    };
+}
+
+window.getExportSVG = function() {
+    return normalizedExportSVG(0)?.svg || '';
+};
+
+window.rasterizeExportSVG = async function(padding) {
+    const artifact = normalizedExportSVG(padding);
+    if (!artifact) {
+        return { success: false, noDiagram: true, error: 'No diagram available to export' };
+    }
+
+    return await new Promise((resolve) => {
+        const image = new Image();
+        image.onload = () => {
+            try {
+                const canvas = document.createElement('canvas');
+                canvas.width = artifact.width;
+                canvas.height = artifact.height;
+                const context = canvas.getContext('2d');
+                if (!context) {
+                    resolve({ success: false, error: 'Failed to create PNG drawing context' });
+                    return;
+                }
+                context.drawImage(image, 0, 0, artifact.width, artifact.height);
+                const dataURL = canvas.toDataURL('image/png');
+                resolve({
+                    success: true,
+                    data: dataURL.substring(dataURL.indexOf(',') + 1),
+                    width: artifact.width,
+                    height: artifact.height
+                });
+            } catch (error) {
+                resolve({ success: false, error: error.message || String(error) });
+            }
+        };
+        image.onerror = () => {
+            resolve({ success: false, error: 'Failed to load SVG for PNG export' });
+        };
+        image.src = 'data:image/svg+xml;charset=utf-8,' + encodeURIComponent(artifact.svg);
+    });
 };
 
 function leadingBlankLineOffset(source) {

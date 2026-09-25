@@ -44,6 +44,7 @@ class MermaidRenderer: NSObject, ObservableObject {
             }
         }
     }
+    var exportErrorHandler: ((ExportError) -> Void)?
     let webView: DiagramWebView
     let validator: DiagramRuntimeValidator
     private let contentController: WKUserContentController
@@ -93,13 +94,31 @@ class MermaidRenderer: NSObject, ObservableObject {
         webView.navigationDelegate = self
         loadBaseHTML()
 
+        webView.canCopyHandler = { [weak self] in
+            self?.canExport ?? false
+        }
+
         webView.copyPNGHandler = { [weak self] in
             Task { @MainActor [weak self] in
                 guard let self else { return }
-                if case .success(let pngData) = await DiagramExporter(webView: self.webView).copyAsPNG() {
+                guard self.canExport else {
+                    self.exportErrorHandler?(.noDiagram)
+                    return
+                }
+                let exportRevision = self.renderRevision
+                switch await DiagramExporter(webView: self.webView).copyAsPNG() {
+                case .success(let pngData):
+                    guard exportRevision == self.renderRevision, self.canExport else {
+                        self.exportErrorHandler?(.previewChanged)
+                        return
+                    }
                     let pasteboard = NSPasteboard.general
                     pasteboard.clearContents()
-                    pasteboard.setData(pngData, forType: .png)
+                    if !pasteboard.setData(pngData, forType: .png) {
+                        self.exportErrorHandler?(.pasteboardWriteFailed)
+                    }
+                case .failure(let error):
+                    self.exportErrorHandler?(error)
                 }
             }
         }
@@ -107,10 +126,24 @@ class MermaidRenderer: NSObject, ObservableObject {
         webView.copySVGHandler = { [weak self] in
             Task { @MainActor [weak self] in
                 guard let self else { return }
-                if case .success(let svg) = await DiagramExporter(webView: self.webView).copySVG() {
+                guard self.canExport else {
+                    self.exportErrorHandler?(.noDiagram)
+                    return
+                }
+                let exportRevision = self.renderRevision
+                switch await DiagramExporter(webView: self.webView).copySVG() {
+                case .success(let svg):
+                    guard exportRevision == self.renderRevision, self.canExport else {
+                        self.exportErrorHandler?(.previewChanged)
+                        return
+                    }
                     let pasteboard = NSPasteboard.general
                     pasteboard.clearContents()
-                    pasteboard.setString(svg, forType: .string)
+                    if !pasteboard.setString(svg, forType: .string) {
+                        self.exportErrorHandler?(.pasteboardWriteFailed)
+                    }
+                case .failure(let error):
+                    self.exportErrorHandler?(error)
                 }
             }
         }
