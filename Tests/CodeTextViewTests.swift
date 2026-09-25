@@ -1,4 +1,5 @@
 import AppKit
+import SwiftUI
 import Testing
 
 @testable import MacUML
@@ -91,5 +92,105 @@ struct CodeTextViewTests {
 
         #expect(window.firstResponder === textView)
         #expect(textView.selectedRange() == NSRange(location: 10, length: 0))
+    }
+
+    @Test("Editor lifetime preserves undo and focus across layout changes")
+    func editorLifetimePreservesUndoAndFocus() async throws {
+        let model = EditorLifecycleModel()
+        let hostingView = NSHostingView(rootView: EditorLifecycleHost(model: model))
+        let window = NSWindow(
+            contentRect: NSRect(x: 0, y: 0, width: 600, height: 400), styleMask: [], backing: .buffered,
+            defer: false)
+        window.contentView = hostingView
+        await refresh(hostingView)
+
+        let textView = try #require(model.actions.textView)
+        window.makeFirstResponder(textView)
+        textView.setSelectedRange(NSRange(location: textView.string.utf16.count, length: 0))
+        textView.insertText(" and Abed", replacementRange: textView.selectedRange())
+        let undoManager = try #require(textView.undoManager)
+        #expect(model.text == "Troy and Abed")
+        #expect(window.firstResponder === textView)
+
+        model.actions.rememberFocus()
+        model.showsEditor = false
+        await refresh(hostingView)
+        #expect(textView.window == nil)
+
+        undoManager.undo()
+        #expect(model.text == "Troy")
+
+        model.showsEditor = true
+        await refresh(hostingView)
+        #expect(model.actions.textView === textView)
+        #expect(textView.window === window)
+        #expect(textView.string == "Troy")
+        #expect(window.firstResponder === textView)
+    }
+
+    @Test("A queued line reveal runs after the editor attaches")
+    func queuedLineRevealRunsAfterAttachment() async throws {
+        let model = EditorLifecycleModel(text: "Troy\nAbed\nAnnie", showsEditor: false)
+        let hostingView = NSHostingView(rootView: EditorLifecycleHost(model: model))
+        let window = NSWindow(
+            contentRect: NSRect(x: 0, y: 0, width: 600, height: 400), styleMask: [], backing: .buffered,
+            defer: false)
+        window.contentView = hostingView
+        await refresh(hostingView)
+
+        model.actions.revealLine(3)
+        model.showsEditor = true
+        await refresh(hostingView)
+
+        let textView = try #require(model.actions.textView)
+        #expect(textView.selectedRange() == NSRange(location: 10, length: 0))
+        #expect(window.firstResponder === textView)
+    }
+
+    private func refresh<Content: View>(_ hostingView: NSHostingView<Content>) async {
+        hostingView.layoutSubtreeIfNeeded()
+        await nextMainQueueTurn()
+        hostingView.layoutSubtreeIfNeeded()
+        await nextMainQueueTurn()
+        await nextMainQueueTurn()
+    }
+
+    private func nextMainQueueTurn() async {
+        await withCheckedContinuation { continuation in
+            DispatchQueue.main.async { continuation.resume() }
+        }
+    }
+}
+
+@MainActor
+private final class EditorLifecycleModel: ObservableObject {
+    @Published var text: String
+    @Published var lineCount: Int
+    @Published var showsEditor: Bool
+    let actions = EditorActions()
+
+    init(text: String = "Troy", showsEditor: Bool = true) {
+        self.text = text
+        lineCount = DocumentView.lineCount(in: text)
+        self.showsEditor = showsEditor
+    }
+}
+
+private struct EditorLifecycleHost: View {
+    @ObservedObject var model: EditorLifecycleModel
+
+    var body: some View {
+        if model.showsEditor {
+            EditorView(
+                text: $model.text,
+                lineCount: $model.lineCount,
+                errorLine: nil,
+                editorFont: .monospacedSystemFont(ofSize: 13, weight: .regular),
+                showLineNumbers: true,
+                actions: model.actions
+            )
+        } else {
+            Color.clear
+        }
     }
 }

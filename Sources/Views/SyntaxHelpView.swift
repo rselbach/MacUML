@@ -32,7 +32,25 @@ struct SyntaxHelpView: View {
                     KeyboardCommandRow(title: "Refresh Preview", shortcut: "⌘R")
                     KeyboardCommandRow(title: "Zoom In", shortcut: "⌘+")
                     KeyboardCommandRow(title: "Zoom Out", shortcut: "⌘−")
-                    KeyboardCommandRow(title: "Actual Size", shortcut: "⌘0")
+                    KeyboardCommandRow(title: "Fit to Window", shortcut: "⌘0")
+                    KeyboardCommandRow(title: "Editor / Split / Preview", shortcut: "⌘1 / ⌘2 / ⌘3")
+                    KeyboardCommandRow(title: "Export PNG", shortcut: "⌘⇧E")
+                    KeyboardCommandRow(title: "Copy SVG", shortcut: "⌘⇧C")
+                    Text(
+                        "Scroll to pan. Pinch or hold Option while scrolling to zoom. 100% fits the diagram to the window."
+                    )
+                    .font(.callout)
+                    .foregroundStyle(.secondary)
+                    Text(
+                        "Pause Live Preview while editing a large document, then use Refresh Preview. Export includes the complete diagram and requires a current preview."
+                    )
+                    .font(.callout)
+                    .foregroundStyle(.secondary)
+                    Text(
+                        "The optional Save formatting setting applies to Save and Save As. Autosave preserves in-progress typing."
+                    )
+                    .font(.callout)
+                    .foregroundStyle(.secondary)
                 }
             }
             .padding(24)

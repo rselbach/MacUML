@@ -19,7 +19,6 @@ class AppDelegate: NSObject, NSApplicationDelegate, ObservableObject {
 @main
 struct MacUMLApp: App {
     @NSApplicationDelegateAdaptor(AppDelegate.self) var appDelegate
-    @FocusedValue(\.renderer) private var renderer
     @FocusedValue(\.formatDocument) private var formatDocument
 
     var body: some Scene {
@@ -29,6 +28,7 @@ struct MacUMLApp: App {
         .defaultSize(width: 900, height: 600)
         .commands {
             ExportCommands()
+            PreviewCommands()
             NewTemplateCommands()
             SyntaxHelpCommand()
             AboutCommand()
@@ -40,32 +40,6 @@ struct MacUMLApp: App {
                 }
                 .keyboardShortcut("f", modifiers: [.command, .shift])
                 .disabled(formatDocument == nil)
-
-                Button("Refresh Preview") {
-                    renderer?.refreshCurrentSource()
-                }
-                .keyboardShortcut("r", modifiers: .command)
-                .disabled(renderer == nil)
-            }
-
-            CommandGroup(after: .toolbar) {
-                Button("Zoom In") {
-                    renderer?.zoomIn()
-                }
-                .keyboardShortcut("+", modifiers: .command)
-                .disabled(renderer == nil)
-
-                Button("Zoom Out") {
-                    renderer?.zoomOut()
-                }
-                .keyboardShortcut("-", modifiers: .command)
-                .disabled(renderer == nil)
-
-                Button("Actual Size") {
-                    renderer?.resetZoom()
-                }
-                .keyboardShortcut("0", modifiers: .command)
-                .disabled(renderer == nil)
             }
         }
 

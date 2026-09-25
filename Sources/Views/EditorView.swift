@@ -9,6 +9,7 @@ final class CodeTextView: NSTextView {
     private var pendingHighlightRange: NSRange?
     var errorLine: Int?
     var previousErrorRange: NSRange?
+    var didMoveToWindowHandler: (() -> Void)?
 
     private(set) var lineStartOffsets: [Int] = [0]
 
@@ -17,6 +18,11 @@ final class CodeTextView: NSTextView {
         rebuildLineStartOffsets(for: string)
         queueIncrementalHighlightRange()
         scheduleHighlighting()
+    }
+
+    override func viewDidMoveToWindow() {
+        super.viewDidMoveToWindow()
+        didMoveToWindowHandler?()
     }
 
     private func rebuildLineStartOffsets(for currentString: String) {
@@ -131,9 +137,81 @@ final class CodeTextView: NSTextView {
 
 @MainActor
 final class EditorActions {
-    weak var textView: CodeTextView?
+    private(set) var textView: CodeTextView?
+    private var scrollView: NSScrollView?
+    private var coordinator: EditorView.Coordinator?
+    private var pendingLine: Int?
+    private var restoresFocus = false
 
-    func revealLine(_ line: Int) { textView?.revealLine(line) }
+    func rememberFocus() {
+        guard let textView, let window = textView.window else { return }
+        restoresFocus = window.firstResponder === textView
+    }
+
+    func retainedScrollView(with coordinator: EditorView.Coordinator) -> NSScrollView? {
+        guard let scrollView, let textView else { return nil }
+        retain(scrollView: scrollView, textView: textView, coordinator: coordinator)
+        return scrollView
+    }
+
+    func retain(scrollView: NSScrollView, textView: CodeTextView, coordinator: EditorView.Coordinator) {
+        self.scrollView = scrollView
+        self.textView = textView
+        self.coordinator = coordinator
+        coordinator.attach(to: textView)
+        textView.didMoveToWindowHandler = { [weak self, weak textView] in
+            guard let textView else { return }
+            self?.restoreInteraction(for: textView)
+        }
+        restoreInteraction(for: textView)
+    }
+
+    private func restoreInteraction(for textView: CodeTextView) {
+        guard pendingLine != nil || restoresFocus else { return }
+        // SwiftUI finishes removing the old representable container after installing its replacement.
+        // Wait through both queue turns so that teardown cannot reset the replacement's first responder.
+        DispatchQueue.main.async { [weak self, weak textView] in
+            DispatchQueue.main.async {
+                guard let self, let textView, self.textView === textView, let window = textView.window else { return }
+                if let line = self.pendingLine {
+                    self.pendingLine = nil
+                    self.restoresFocus = false
+                    textView.revealLine(line)
+                } else if self.restoresFocus, window.makeFirstResponder(textView) {
+                    self.restoresFocus = false
+                }
+            }
+        }
+    }
+
+    func revealLine(_ line: Int) {
+        guard let textView, textView.window != nil else {
+            pendingLine = line
+            return
+        }
+        textView.revealLine(line)
+    }
+
+    func editorDidUpdate(_ textView: CodeTextView) {
+        restoreInteraction(for: textView)
+    }
+}
+
+final class EditorContainerView: NSView {
+    let scrollView: NSScrollView
+
+    init(scrollView: NSScrollView) {
+        self.scrollView = scrollView
+        super.init(frame: .zero)
+        scrollView.frame = bounds
+        scrollView.autoresizingMask = [.width, .height]
+        addSubview(scrollView)
+    }
+
+    @available(*, unavailable)
+    required init?(coder: NSCoder) {
+        fatalError("init(coder:) has not been implemented")
+    }
 }
 
 struct EditorView: NSViewRepresentable {
@@ -144,10 +222,13 @@ struct EditorView: NSViewRepresentable {
     var showLineNumbers: Bool
     var actions: EditorActions? = nil
 
-    func makeNSView(context: Context) -> NSScrollView {
+    func makeNSView(context: Context) -> EditorContainerView {
+        if let scrollView = actions?.retainedScrollView(with: context.coordinator) {
+            return EditorContainerView(scrollView: scrollView)
+        }
+
         let scrollView = NSScrollView()
         let textView = CodeTextView()
-        actions?.textView = textView
         textView.setAccessibilityLabel("Mermaid source")
 
         textView.minSize = NSSize(width: 0, height: 0)
@@ -159,7 +240,6 @@ struct EditorView: NSViewRepresentable {
             width: scrollView.contentSize.width, height: CGFloat.greatestFiniteMagnitude)
         textView.textContainer?.widthTracksTextView = true
 
-        textView.delegate = context.coordinator
         textView.isRichText = false
         textView.font = editorFont
         textView.textColor = NSColor.textColor
@@ -173,6 +253,7 @@ struct EditorView: NSViewRepresentable {
 
         textView.string = text
         textView.applyInitialHighlighting()
+        context.coordinator.attach(to: textView)
 
         scrollView.documentView = textView
         scrollView.hasVerticalScroller = true
@@ -186,10 +267,13 @@ struct EditorView: NSViewRepresentable {
             rulerView.refresh(using: editorFont)
         }
 
-        return scrollView
+        actions?.retain(scrollView: scrollView, textView: textView, coordinator: context.coordinator)
+
+        return EditorContainerView(scrollView: scrollView)
     }
 
-    func updateNSView(_ scrollView: NSScrollView, context: Context) {
+    func updateNSView(_ containerView: EditorContainerView, context: Context) {
+        let scrollView = containerView.scrollView
         guard let textView = scrollView.documentView as? CodeTextView else { return }
 
         let fontChanged = textView.font != editorFont
@@ -218,24 +302,53 @@ struct EditorView: NSViewRepresentable {
         }
 
         textView.setErrorLine(errorLine)
+        actions?.editorDidUpdate(textView)
     }
 
     func makeCoordinator() -> Coordinator {
         Coordinator(text: $text, lineCount: $lineCount)
     }
 
+    @MainActor
     class Coordinator: NSObject, NSTextViewDelegate {
         var text: Binding<String>
         var lineCount: Binding<Int>
+        weak var textView: CodeTextView?
 
         init(text: Binding<String>, lineCount: Binding<Int>) {
             self.text = text
             self.lineCount = lineCount
         }
 
+        func attach(to textView: CodeTextView) {
+            self.textView = textView
+            textView.delegate = self
+            NotificationCenter.default.removeObserver(
+                self, name: NSTextStorage.didProcessEditingNotification, object: nil)
+            NotificationCenter.default.addObserver(
+                self,
+                selector: #selector(handleTextStorageDidProcessEditing(_:)),
+                name: NSTextStorage.didProcessEditingNotification,
+                object: textView.textStorage
+            )
+        }
+
         func textDidChange(_ notification: Notification) {
             guard let textView = notification.object as? CodeTextView else { return }
             text.wrappedValue = textView.string
+            lineCount.wrappedValue = textView.lineStartOffsets.count
+        }
+
+        @objc private func handleTextStorageDidProcessEditing(_ notification: Notification) {
+            guard
+                let textStorage = notification.object as? NSTextStorage,
+                textStorage.editedMask.contains(.editedCharacters),
+                let textView,
+                textView.window == nil,
+                text.wrappedValue != textStorage.string
+            else { return }
+            textView.applyInitialHighlighting()
+            text.wrappedValue = textStorage.string
             lineCount.wrappedValue = textView.lineStartOffsets.count
         }
     }

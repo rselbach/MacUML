@@ -2,14 +2,6 @@ import AppKit
 import SwiftUI
 import WebKit
 
-private enum Constants {
-    static let zoomButtonSpacing: CGFloat = 6
-    static let zoomLevelMinWidth: CGFloat = 42
-    static let themePickerSpacing: CGFloat = 4
-    static let toolbarHorizontalPadding: CGFloat = 12
-    static let toolbarVerticalPadding: CGFloat = 6
-}
-
 struct PreviewPane: View {
     @ObservedObject var renderer: MermaidRenderer
 
@@ -28,7 +20,7 @@ struct PreviewPane: View {
                     } else {
                         ContentUnavailableView(
                             "Diagram Preview", systemImage: "point.3.connected.trianglepath.dotted",
-                            description: Text("Start typing or choose File > New from Template.")
+                            description: Text(emptyPreviewMessage)
                         )
                     }
                 }
@@ -45,61 +37,102 @@ struct PreviewPane: View {
         }
     }
 
+    private var emptyPreviewMessage: String {
+        if renderer.state.error != nil { return "Fix the source to generate a preview." }
+        if !renderer.isLivePreviewEnabled { return "Preview paused. Use Refresh Preview when ready." }
+        return "Start typing or choose File > New from Template."
+    }
+
     private var toolbar: some View {
-        HStack {
-            HStack(spacing: Constants.zoomButtonSpacing) {
-                Button {
-                    renderer.zoomOut()
-                } label: {
-                    Image(systemName: "minus.magnifyingglass")
-                }
-                .help("Zoom Out")
-                .accessibilityLabel("Zoom Out")
-
-                Button {
-                    renderer.zoomIn()
-                } label: {
-                    Image(systemName: "plus.magnifyingglass")
-                }
-                .help("Zoom In")
-                .accessibilityLabel("Zoom In")
-
-                Button {
-                    renderer.resetZoom()
-                } label: {
-                    Text("100%")
-                        .font(.caption.monospacedDigit())
-                }
-                .help("Actual Size")
-                .accessibilityLabel("Reset Zoom to Actual Size")
-
-                Text("\(Int((renderer.zoomLevel * 100).rounded()))%")
-                    .font(.caption.monospacedDigit())
-                    .foregroundStyle(.secondary)
-                    .frame(minWidth: Constants.zoomLevelMinWidth, alignment: .trailing)
-                    .accessibilityLabel("Zoom level \(Int((renderer.zoomLevel * 100).rounded())) percent")
+        ViewThatFits(in: .horizontal) {
+            HStack(spacing: 8) {
+                zoomControls
+                Spacer(minLength: 8)
+                themePicker
+                liveControls
             }
-
-            Spacer()
-
-            HStack(spacing: Constants.themePickerSpacing) {
-                Text("Theme:")
-                    .foregroundStyle(.secondary)
-                    .font(.caption)
-
-                Picker("Theme", selection: $renderer.theme) {
-                    ForEach(MermaidTheme.allCases, id: \.self) { theme in
-                        Text(theme.label).tag(theme)
-                    }
+            VStack(spacing: 6) {
+                HStack {
+                    zoomControls
+                    Spacer()
+                    themePicker
                 }
-                .pickerStyle(.menu)
-                .fixedSize()
-                .accessibilityLabel("Diagram Theme")
+                HStack {
+                    liveControls
+                    Spacer()
+                }
             }
         }
-        .padding(.horizontal, Constants.toolbarHorizontalPadding)
-        .padding(.vertical, Constants.toolbarVerticalPadding)
+        .controlSize(.small)
+        .padding(8)
         .background(Color(nsColor: .windowBackgroundColor))
+    }
+
+    private var zoomControls: some View {
+        HStack(spacing: 4) {
+            Button {
+                renderer.zoomOut()
+            } label: {
+                Image(systemName: "minus.magnifyingglass")
+            }
+            .help("Zoom Out")
+            .accessibilityLabel("Zoom Out")
+
+            Menu {
+                Button("Fit to Window") { renderer.resetZoom() }
+                Divider()
+                ForEach([25, 50, 100, 150, 200, 300, 500], id: \.self) { percent in
+                    Button("\(percent)%") { renderer.setZoom(Double(percent) / 100) }
+                }
+            } label: {
+                Text("\(Int((renderer.zoomLevel * 100).rounded()))%")
+                    .monospacedDigit()
+            }
+            .fixedSize()
+            .accessibilityLabel("Preview zoom, \(Int((renderer.zoomLevel * 100).rounded())) percent")
+            .help("100% fits the window. Scroll to pan; pinch or Option-scroll to zoom.")
+
+            Button {
+                renderer.zoomIn()
+            } label: {
+                Image(systemName: "plus.magnifyingglass")
+            }
+            .help("Zoom In")
+            .accessibilityLabel("Zoom In")
+        }
+    }
+
+    private var themePicker: some View {
+        Picker("Theme", selection: $renderer.theme) {
+            ForEach(MermaidTheme.allCases, id: \.self) { theme in
+                Text(theme.label).tag(theme)
+            }
+        }
+        .labelsHidden()
+        .pickerStyle(.menu)
+        .fixedSize()
+        .help("Diagram Theme")
+        .accessibilityLabel("Diagram Theme")
+    }
+
+    private var liveControls: some View {
+        HStack(spacing: 4) {
+            Button {
+                renderer.isLivePreviewEnabled.toggle()
+            } label: {
+                Image(systemName: renderer.isLivePreviewEnabled ? "pause" : "play")
+            }
+            .help(renderer.isLivePreviewEnabled ? "Pause Live Preview" : "Resume Live Preview")
+            .accessibilityLabel(renderer.isLivePreviewEnabled ? "Pause Live Preview" : "Resume Live Preview")
+
+            Button {
+                renderer.refreshCurrentSource()
+            } label: {
+                Image(systemName: "arrow.clockwise")
+            }
+            .help("Refresh Preview (⌘R)")
+            .accessibilityLabel("Refresh Preview")
+        }
     }
 }
 

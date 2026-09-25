@@ -6,6 +6,7 @@ struct DocumentView: View {
     var fileURL: URL? = nil
     @StateObject private var renderer = MermaidRenderer()
     @StateObject private var settings = AppSettings.shared
+    @SceneStorage("documentLayout") private var layout: DocumentLayout = .split
     @State private var editorActions = EditorActions()
     @State private var cachedLineCount = 0
     @State private var exportError: String?
@@ -13,27 +14,33 @@ struct DocumentView: View {
 
     var body: some View {
         VStack(spacing: 0) {
-            HSplitView {
-                EditorView(
-                    text: $document.text,
-                    lineCount: $cachedLineCount,
-                    errorLine: renderer.state.error?.line,
-                    editorFont: settings.editorFont,
-                    showLineNumbers: settings.showLineNumbers,
-                    actions: editorActions
-                )
-                .frame(minWidth: 280)
-
-                PreviewPane(renderer: renderer)
-                    .frame(minWidth: 280)
+            Group {
+                switch layout {
+                case .editor:
+                    editor
+                case .split:
+                    HSplitView {
+                        editor.background(SplitViewAutosave())
+                            .frame(minWidth: 280)
+                        PreviewPane(renderer: renderer).frame(minWidth: 280)
+                    }
+                case .preview:
+                    PreviewPane(renderer: renderer)
+                }
             }
 
             if let error = renderer.state.error {
-                DiagramErrorView(error: error, goToLine: editorActions.revealLine)
+                DiagramErrorView(error: error) { line in
+                    if layout == .preview { changeLayout(.split) }
+                    editorActions.revealLine(line)
+                }
             } else if cachedLineCount >= 5000 {
                 HStack {
                     Label("\(cachedLineCount.formatted()) lines", systemImage: "speedometer")
-                    Text("Pause the preview to reduce work while editing.")
+                    Text(
+                        renderer.isLivePreviewEnabled
+                            ? "Pause the preview to reduce work while editing."
+                            : "Preview paused. Use Refresh Preview when ready.")
                     Spacer()
                     Button(renderer.isLivePreviewEnabled ? "Pause Preview" : "Resume Preview") {
                         renderer.isLivePreviewEnabled.toggle()
@@ -46,6 +53,15 @@ struct DocumentView: View {
         }
         .frame(minWidth: 600, minHeight: 400)
         .toolbar {
+            Picker("Document Layout", selection: layoutBinding) {
+                ForEach(DocumentLayout.allCases, id: \.self) { mode in
+                    Label(mode.title, systemImage: mode.symbol).tag(mode)
+                        .help(mode.title)
+                }
+            }
+            .pickerStyle(.segmented)
+            .labelStyle(.iconOnly)
+            .accessibilityLabel("Document Layout")
             Menu {
                 ExportButtons(actions: exportActions)
             } label: {
@@ -61,6 +77,7 @@ struct DocumentView: View {
                 ProgressView().controlSize(.small).accessibilityLabel("Exporting diagram")
             }
         }
+        .focusedSceneValue(\.documentLayout, layoutBinding)
         .focusedSceneValue(\.renderer, renderer)
         .focusedSceneValue(\.formatDocument, formatDocument)
         .focusedSceneValue(\.exportDiagram, exportActions)
@@ -95,6 +112,23 @@ struct DocumentView: View {
         } message: {
             Text(exportError ?? "")
         }
+    }
+
+    private var editor: some View {
+        EditorView(
+            text: $document.text, lineCount: $cachedLineCount,
+            errorLine: renderer.state.error?.line, editorFont: settings.editorFont,
+            showLineNumbers: settings.showLineNumbers, actions: editorActions
+        )
+    }
+
+    private var layoutBinding: Binding<DocumentLayout> {
+        Binding(get: { layout }, set: changeLayout)
+    }
+
+    private func changeLayout(_ mode: DocumentLayout) {
+        editorActions.rememberFocus()
+        layout = mode
     }
 
     private var exportActions: DocumentExportActions {
