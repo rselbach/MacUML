@@ -45,11 +45,11 @@ final class MermaidHighlighter {
             ("-->>|->>|--x|-x|--\\)|-\\)|:", arrowColor),
             ("-->|==>|-.->|==>>|-.->>|--o|<-->|<--|<.->", arrowColor),
             ("---|===|\\.\\.\\.", arrowColor),
+            ("\\(\\([^)]+\\)\\)", nodeColor),
+            ("\\[\\[[^\\]]+\\]\\]", nodeColor),
             ("\\[[^\\]]+\\]", nodeColor),
             ("\\([^)]+\\)", nodeColor),
             ("\\{[^}]+\\}", nodeColor),
-            ("\\(\\([^)]+\\)\\)", nodeColor),
-            ("\\[\\[[^\\]]+\\]\\]", nodeColor),
         ]
 
         return patternDefs.compactMap { pattern, color in

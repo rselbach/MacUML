@@ -157,6 +157,8 @@ struct MermaidHighlighterTests {
         NodeTestCase(text: "A[Box Label]", nodeStart: 1, nodeEnd: 11, label: "square brackets"),
         NodeTestCase(text: "A(Round Label)", nodeStart: 1, nodeEnd: 13, label: "parentheses"),
         NodeTestCase(text: "A{Diamond}", nodeStart: 1, nodeEnd: 9, label: "curly braces"),
+        NodeTestCase(text: "A[[Troy]]", nodeStart: 1, nodeEnd: 8, label: "double square brackets"),
+        NodeTestCase(text: "A((Abed))", nodeStart: 1, nodeEnd: 8, label: "double parentheses"),
     ]
 
     @Test("Nodes are highlighted orange", arguments: nodeCases)
