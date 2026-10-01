@@ -10,9 +10,12 @@ final class MermaidHighlighter {
         "erDiagram", "gantt", "pie", "mindmap", "timeline", "gitGraph", "journey",
         "quadrantChart", "requirementDiagram", "C4Context", "C4Container", "C4Component",
         "C4Dynamic", "C4Deployment", "sankey", "xychart", "block", "packet", "architecture",
+        "kanban", "radar", "treemap",
         "subgraph", "end", "participant", "actor", "loop", "alt", "else", "opt", "par",
-        "critical", "break", "rect", "note", "over", "activate", "deactivate", "title",
-        "section", "class", "state", "direction", "TB", "TD", "BT", "RL", "LR",
+        "critical", "break", "rect", "note", "Note", "over", "activate", "deactivate", "title",
+        "autonumber", "box", "create", "destroy",
+        "section", "class", "classDef", "style", "linkStyle", "click", "namespace",
+        "state", "direction", "TB", "TD", "BT", "RL", "LR",
         "dateFormat", "axisFormat", "excludes", "includes", "todayMarker", "tickInterval"
     ]
 

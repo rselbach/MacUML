@@ -26,6 +26,12 @@ struct MermaidHighlighterTests {
         ("participant Alice", 0, 10, "participant keyword"),
         ("subgraph cluster_A", 0, 7, "subgraph keyword"),
         ("end", 0, 2, "end keyword"),
+        ("Note right of Troy", 0, 3, "capitalized Note keyword"),
+        ("classDef done fill:#9f6", 0, 7, "classDef keyword"),
+        ("style Troy fill:#f9f", 0, 4, "style keyword"),
+        ("linkStyle 0 stroke:#f66", 0, 8, "linkStyle keyword"),
+        ("click Troy call review()", 0, 4, "click keyword"),
+        ("autonumber", 0, 9, "autonumber keyword"),
     ])
     func keywordHighlighting(text: String, start: Int, end: Int, label: String) async {
         let storage = await makeStorage(text)
