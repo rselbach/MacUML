@@ -399,8 +399,15 @@ window.renderDiagram = async function(source) {
     }
 };
 
-function normalizedExportSVG(padding) {
+// Exports use the preview's own background so dark themes stay legible.
+function exportBackgroundColor() {
+    const container = document.getElementById('diagram');
+    return container ? getComputedStyle(container).backgroundColor : 'white';
+}
+
+function normalizedExportSVG(padding, fillBackground) {
     if (!window.exportSVG) return null;
+    const backgroundColor = fillBackground ? exportBackgroundColor() : null;
 
     const document = new DOMParser().parseFromString(window.exportSVG, 'image/svg+xml');
     const svg = document.documentElement;
@@ -423,6 +430,15 @@ function normalizedExportSVG(padding) {
     );
     svg.setAttribute('width', String(width));
     svg.setAttribute('height', String(height));
+    if (backgroundColor) {
+        const background = document.createElementNS('http://www.w3.org/2000/svg', 'rect');
+        background.setAttribute('x', String(viewBox[0] - safePadding));
+        background.setAttribute('y', String(viewBox[1] - safePadding));
+        background.setAttribute('width', String(width));
+        background.setAttribute('height', String(height));
+        background.setAttribute('style', 'fill: ' + backgroundColor + '; stroke: none');
+        svg.insertBefore(background, svg.firstChild);
+    }
     svg.style.removeProperty('max-width');
     svg.style.removeProperty('max-height');
     svg.style.removeProperty('width');
@@ -435,12 +451,13 @@ function normalizedExportSVG(padding) {
     };
 }
 
-window.getExportSVG = function() {
-    return normalizedExportSVG(0)?.svg || '';
+window.getExportSVG = function(fillBackground) {
+    return normalizedExportSVG(0, fillBackground === true)?.svg || '';
 };
 
-window.rasterizeExportSVG = async function(padding) {
-    const artifact = normalizedExportSVG(padding);
+window.rasterizeExportSVG = async function(padding, fillBackground) {
+    const artifact = normalizedExportSVG(padding, false);
+    const backgroundColor = fillBackground === true ? exportBackgroundColor() : null;
     if (!artifact) {
         return { success: false, noDiagram: true, error: 'No diagram available to export' };
     }
@@ -456,6 +473,11 @@ window.rasterizeExportSVG = async function(padding) {
                 if (!context) {
                     resolve({ success: false, error: 'Failed to create PNG drawing context' });
                     return;
+                }
+                if (backgroundColor) {
+                    // fill the canvas so the edges stay opaque after rounding up the size
+                    context.fillStyle = backgroundColor;
+                    context.fillRect(0, 0, canvas.width, canvas.height);
                 }
                 context.drawImage(image, 0, 0, artifact.width, artifact.height);
                 const dataURL = canvas.toDataURL('image/png');

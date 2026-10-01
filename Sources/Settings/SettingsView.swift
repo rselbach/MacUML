@@ -3,7 +3,7 @@ import SwiftUI
 private enum Constants {
     static let fontSizeLabelWidth: CGFloat = 45
     static let windowWidth: CGFloat = 400
-    static let windowHeight: CGFloat = 320
+    static let windowHeight: CGFloat = 380
 }
 
 struct SettingsView: View {
@@ -44,6 +44,16 @@ struct SettingsView: View {
                     }
                 }
                 .pickerStyle(.menu)
+            }
+
+            Section("Export") {
+                Picker("Background:", selection: $settings.exportBackground) {
+                    ForEach(ExportBackground.allCases, id: \.self) { background in
+                        Text(background.label).tag(background)
+                    }
+                }
+                .pickerStyle(.menu)
+                .help("Theme Color matches the preview so dark themes stay readable.")
             }
         }
         .formStyle(.grouped)
