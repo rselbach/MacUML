@@ -114,6 +114,32 @@ struct MermaidRendererTests {
         #expect(error.line == 4)
     }
 
+    @Test(
+        "Error lines account for text Mermaid strips before parsing",
+        arguments: [
+            ("---\ntitle: Troy\n---\nflowchart TD\n    A-->B\n    C[[[ bad\n    D-->E\n", 6),
+            ("---\nconfig:\n  theme: forest\n---\n\n\nflowchart TD\n    C[[[ bad\n", 8),
+            ("%%{init: {'theme':'forest'}}%%\nflowchart TD\n    A-->B\n    C[[[ bad\n", 4),
+            ("%%{\n  init: {'theme':'forest'}\n}%%\nflowchart TD\n    C[[[ bad\n", 5),
+            ("%% Greendale\nflowchart TD\n    A-->B\n    C[[[ bad\n", 4),
+            ("flowchart TD\n    %% Troy\n\n    %% Abed\n    A-->B\n    C[[[ bad\n", 6),
+            ("\n\nflowchart TD\n    A-->B\n    C[[[ bad\n", 5),
+            ("flowchart TD\n    A-->B\n    C[[[ bad\n", 3),
+            ("\nflowchart TD\n    Troy -->\n\n\n", 3),
+        ])
+    @MainActor
+    func errorLinesMapToOriginalSource(source: String, line: Int) async throws {
+        let renderer = MermaidRenderer()
+        renderer.render(source: source)
+
+        try await waitForState(renderer: renderer, timeout: .seconds(5)) {
+            if case .failure = $0.state { return true }
+            return false
+        }
+
+        #expect(renderer.state.error?.line == line, "\(renderer.state.error?.message ?? "no error")")
+    }
+
     @Test("Clearing source invalidates pending work and prevents theme restoration")
     @MainActor
     func clearInvalidatesRenderedSource() async throws {
