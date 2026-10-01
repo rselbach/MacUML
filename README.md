@@ -57,7 +57,8 @@ Default** removes it and uses the theme chosen in Settings.
 | Export PNG | ⌘⇧E |
 | Copy SVG | ⌘⇧C |
 | Format Document | ⌘⇧F |
-| Mermaid Syntax Help | ⌘/ |
+| Toggle Comment | ⌘/ |
+| Mermaid Syntax Help | ⌘? |
 
 Format Document cleans up whitespace and preserves Mermaid syntax. The optional
 formatting setting in Settings applies to explicit Save and Save As commands.
