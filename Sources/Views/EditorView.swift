@@ -62,13 +62,54 @@ final class CodeTextView: NSTextView {
         string != newText
     }
 
+    /// Replaces the text as one undoable edit so earlier undo steps keep valid ranges.
     func setStringPreservingSelection(_ newString: String) {
         let previousRanges = selectedRanges
-        string = newString
-        let newLength = (newString as NSString).length
+        let oldText = string as NSString
+        let newText = newString as NSString
+        let (oldRange, newRange) = Self.changedRanges(from: oldText, to: newText)
+        let replacement = newText.substring(with: newRange)
+
+        breakUndoCoalescing()
+        guard shouldChangeText(in: oldRange, replacementString: replacement) else { return }
+        textStorage?.replaceCharacters(in: oldRange, with: replacement)
+        didChangeText()
+        breakUndoCoalescing()
+
         selectedRanges = previousRanges.compactMap {
-            $0.rangeValue.clampedSelection(to: newLength).map(NSValue.init(range:))
+            $0.rangeValue.clampedSelection(to: newText.length).map(NSValue.init(range:))
         }
+    }
+
+    /// Returns the differing span between two strings, trimmed of their common prefix and suffix.
+    static func changedRanges(from oldText: NSString, to newText: NSString) -> (old: NSRange, new: NSRange) {
+        let oldLength = oldText.length
+        let newLength = newText.length
+        let limit = min(oldLength, newLength)
+
+        var prefix = 0
+        while prefix < limit, oldText.character(at: prefix) == newText.character(at: prefix) {
+            prefix += 1
+        }
+        // keep surrogate pairs intact
+        if prefix > 0, UTF16.isLeadSurrogate(oldText.character(at: prefix - 1)) {
+            prefix -= 1
+        }
+
+        var suffix = 0
+        while suffix < limit - prefix,
+            oldText.character(at: oldLength - suffix - 1) == newText.character(at: newLength - suffix - 1)
+        {
+            suffix += 1
+        }
+        if suffix > 0, UTF16.isTrailSurrogate(oldText.character(at: oldLength - suffix)) {
+            suffix -= 1
+        }
+
+        return (
+            NSRange(location: prefix, length: oldLength - prefix - suffix),
+            NSRange(location: prefix, length: newLength - prefix - suffix)
+        )
     }
 
     private func scheduleHighlighting() {
@@ -334,7 +375,9 @@ struct EditorView: NSViewRepresentable {
         }
 
         func textDidChange(_ notification: Notification) {
-            guard let textView = notification.object as? CodeTextView else { return }
+            guard let textView = notification.object as? CodeTextView,
+                text.wrappedValue != textView.string
+            else { return }
             text.wrappedValue = textView.string
             lineCount.wrappedValue = textView.lineStartOffsets.count
         }
