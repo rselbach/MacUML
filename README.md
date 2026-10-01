@@ -16,6 +16,7 @@ A native macOS editor for [Mermaid](https://mermaid.js.org/) diagrams with live 
 - Syntax highlighting for Mermaid code
 - Document-based app (`.mmd` and `.mermaid` files)
 - Flowchart, sequence, class, state, and blank templates
+- Per-document themes saved in Mermaid front matter
 - SVG and PNG file export and clipboard copy
 - Editor, split, and preview layouts with a saved divider position
 - Error details and navigation to the affected source line
@@ -43,6 +44,10 @@ and it keeps fitting as you edit until you zoom. The displayed percentage is the
 diagram's actual scale.
 Pause Live Preview while making a series of edits to a large file, then use
 Refresh Preview when ready.
+
+The preview's theme menu saves the choice in the document as Mermaid front
+matter (`config.theme`), so the file and other Mermaid tools keep it. **App
+Default** removes it and uses the theme chosen in Settings.
 
 | Command | Shortcut |
 | --- | --- |

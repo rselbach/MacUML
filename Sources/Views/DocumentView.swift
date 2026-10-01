@@ -22,10 +22,10 @@ struct DocumentView: View {
                     HSplitView {
                         editor.background(SplitViewAutosave())
                             .frame(minWidth: 280)
-                        PreviewPane(renderer: renderer).frame(minWidth: 280)
+                        preview.frame(minWidth: 280)
                     }
                 case .preview:
-                    PreviewPane(renderer: renderer)
+                    preview
                 }
             }
 
@@ -83,7 +83,9 @@ struct DocumentView: View {
         .focusedSceneValue(\.exportDiagram, exportActions)
         .onChange(of: document.text) { _, source in
             renderer.render(source: source)
+            syncTheme()
         }
+        .onChange(of: settings.defaultDiagramTheme) { _, _ in syncTheme() }
         .onChange(of: renderer.state.error) { _, error in
             guard let error, let window = editorActions.textView?.window else { return }
             let message = error.line.map { "Diagram error on line \($0)" } ?? "Diagram preview unavailable"
@@ -99,6 +101,7 @@ struct DocumentView: View {
             renderer.exportErrorHandler = { [errorState = $exportError] error in
                 errorState.wrappedValue = error.localizedDescription
             }
+            syncTheme()
             renderer.render(source: document.text)
         }
         .onDisappear { renderer.exportErrorHandler = nil }
@@ -120,6 +123,22 @@ struct DocumentView: View {
             errorLine: renderer.state.error?.line, editorFont: settings.editorFont,
             showLineNumbers: settings.showLineNumbers, actions: editorActions
         )
+    }
+
+    private var preview: some View {
+        PreviewPane(renderer: renderer, theme: themeBinding, defaultTheme: settings.defaultDiagramTheme)
+    }
+
+    /// The theme stored in the document's front matter; nil uses the app default.
+    private var themeBinding: Binding<MermaidTheme?> {
+        Binding(
+            get: { MermaidFrontMatter.theme(in: document.text) },
+            set: { document.text = MermaidFrontMatter.settingTheme($0, in: document.text) }
+        )
+    }
+
+    private func syncTheme() {
+        renderer.theme = MermaidFrontMatter.theme(in: document.text) ?? settings.defaultDiagramTheme
     }
 
     private var layoutBinding: Binding<DocumentLayout> {

@@ -4,6 +4,8 @@ import WebKit
 
 struct PreviewPane: View {
     @ObservedObject var renderer: MermaidRenderer
+    @Binding var theme: MermaidTheme?
+    let defaultTheme: MermaidTheme
 
     var body: some View {
         VStack(spacing: 0) {
@@ -105,15 +107,17 @@ struct PreviewPane: View {
     }
 
     private var themePicker: some View {
-        Picker("Theme", selection: $renderer.theme) {
-            ForEach(MermaidTheme.allCases, id: \.self) { theme in
-                Text(theme.label).tag(theme)
+        Picker("Theme", selection: $theme) {
+            Text("App Default (\(defaultTheme.label))").tag(MermaidTheme?.none)
+            Divider()
+            ForEach(MermaidFrontMatter.documentThemes, id: \.self) { theme in
+                Text(theme.label).tag(MermaidTheme?.some(theme))
             }
         }
         .labelsHidden()
         .pickerStyle(.menu)
         .fixedSize()
-        .help("Diagram Theme")
+        .help("Diagram theme, saved in the document's front matter")
         .accessibilityLabel("Diagram Theme")
     }
 

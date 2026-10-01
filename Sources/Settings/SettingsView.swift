@@ -44,6 +44,7 @@ struct SettingsView: View {
                     }
                 }
                 .pickerStyle(.menu)
+                .help("Used when a document doesn't set a theme in its front matter.")
             }
 
             Section("Export") {
