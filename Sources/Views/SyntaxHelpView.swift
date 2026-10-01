@@ -31,7 +31,7 @@ struct SyntaxHelpView: View {
 
                     KeyboardCommandRow(title: "Toggle Comment", shortcut: "⌘/")
                     KeyboardCommandRow(title: "Refresh Preview", shortcut: "⌘R")
-                    KeyboardCommandRow(title: "Zoom In", shortcut: "⌘+")
+                    KeyboardCommandRow(title: "Zoom In", shortcut: "⌘=")
                     KeyboardCommandRow(title: "Zoom Out", shortcut: "⌘−")
                     KeyboardCommandRow(title: "Fit to Window", shortcut: "⌘0")
                     KeyboardCommandRow(title: "Editor / Split / Preview", shortcut: "⌘1 / ⌘2 / ⌘3")
