@@ -128,6 +128,59 @@ struct CodeTextViewTests {
         #expect(window.firstResponder === textView)
     }
 
+    @Test("Formatting from the document can be undone without disturbing earlier edits")
+    func externalFormattingIsUndoable() async throws {
+        let model = EditorLifecycleModel(text: "flowchart TD")
+        let hostingView = NSHostingView(rootView: EditorLifecycleHost(model: model))
+        let window = NSWindow(
+            contentRect: NSRect(x: 0, y: 0, width: 600, height: 400), styleMask: [], backing: .buffered,
+            defer: false)
+        window.contentView = hostingView
+        await refresh(hostingView)
+
+        let textView = try #require(model.actions.textView)
+        window.makeFirstResponder(textView)
+        let undoManager = try #require(textView.undoManager)
+        // separate undo steps the way distinct key events would in the app
+        undoManager.groupsByEvent = false
+        defer { undoManager.groupsByEvent = true }
+        func step(_ edit: () -> Void) {
+            undoManager.beginUndoGrouping()
+            edit()
+            undoManager.endUndoGrouping()
+        }
+
+        textView.setSelectedRange(NSRange(location: textView.string.utf16.count, length: 0))
+        step { textView.insertText("   \n\n\n", replacementRange: textView.selectedRange()) }
+        step { textView.insertText("    Troy --> Abed", replacementRange: textView.selectedRange()) }
+        let unformatted = model.text
+
+        undoManager.beginUndoGrouping()
+        model.text = MermaidFormatter.format(model.text)
+        await refresh(hostingView)
+        undoManager.endUndoGrouping()
+        #expect(textView.string == "flowchart TD\n\n    Troy --> Abed\n")
+
+        undoManager.undo()
+        #expect(model.text == unformatted)
+        undoManager.undo()
+        #expect(model.text == "flowchart TD   \n\n\n")
+        undoManager.redo()
+        undoManager.redo()
+        #expect(model.text == "flowchart TD\n\n    Troy --> Abed\n")
+    }
+
+    @Test("Changed ranges trim common text without splitting surrogate pairs")
+    func changedRangesTrimCommonText() {
+        let ranges = CodeTextView.changedRanges(from: "Troy 🍕 Abed", to: "Troy 🍔 Abed")
+        #expect(ranges.old == NSRange(location: 5, length: 2))
+        #expect(ranges.new == NSRange(location: 5, length: 2))
+
+        let insertion = CodeTextView.changedRanges(from: "Troy", to: "Troy and Abed")
+        #expect(insertion.old == NSRange(location: 4, length: 0))
+        #expect(insertion.new == NSRange(location: 4, length: 9))
+    }
+
     @Test("A queued line reveal runs after the editor attaches")
     func queuedLineRevealRunsAfterAttachment() async throws {
         let model = EditorLifecycleModel(text: "Troy\nAbed\nAnnie", showsEditor: false)
