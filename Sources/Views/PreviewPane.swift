@@ -79,7 +79,9 @@ struct PreviewPane: View {
             .accessibilityLabel("Zoom Out")
 
             Menu {
-                Button("Fit to Window") { renderer.resetZoom() }
+                Toggle(
+                    "Fit to Window",
+                    isOn: Binding(get: { renderer.fitsWindow }, set: { _ in renderer.resetZoom() }))
                 Divider()
                 ForEach([25, 50, 100, 150, 200, 300, 500], id: \.self) { percent in
                     Button("\(percent)%") { renderer.setZoom(Double(percent) / 100) }
@@ -90,7 +92,7 @@ struct PreviewPane: View {
             }
             .fixedSize()
             .accessibilityLabel("Preview zoom, \(Int((renderer.zoomLevel * 100).rounded())) percent")
-            .help("100% fits the window. Scroll to pan; pinch or Option-scroll to zoom.")
+            .help("100% is actual size. Scroll to pan; pinch or Option-scroll to zoom.")
 
             Button {
                 renderer.zoomIn()

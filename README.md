@@ -38,7 +38,9 @@ contains an error, the last successful preview stays visible with a notice.
 Export becomes available again once the preview matches the source.
 
 Scroll to pan the preview. Pinch, or hold Option while scrolling, to zoom. **Fit to
-Window** resets the view. The displayed percentage is relative to that fit.
+Window** shrinks large diagrams to the window and shows small ones at actual size,
+and it keeps fitting as you edit until you zoom. The displayed percentage is the
+diagram's actual scale.
 Pause Live Preview while making a series of edits to a large file, then use
 Refresh Preview when ready.
 

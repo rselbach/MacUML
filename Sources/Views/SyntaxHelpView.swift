@@ -37,7 +37,7 @@ struct SyntaxHelpView: View {
                     KeyboardCommandRow(title: "Export PNG", shortcut: "⌘⇧E")
                     KeyboardCommandRow(title: "Copy SVG", shortcut: "⌘⇧C")
                     Text(
-                        "Scroll to pan. Pinch or hold Option while scrolling to zoom. 100% fits the diagram to the window."
+                        "Scroll to pan. Pinch or hold Option while scrolling to zoom. Fit to Window shrinks large diagrams to the window; 100% is actual size."
                     )
                     .font(.callout)
                     .foregroundStyle(.secondary)
