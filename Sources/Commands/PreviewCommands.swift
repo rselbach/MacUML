@@ -60,7 +60,7 @@ struct PreviewCommands: Commands {
                 .disabled(renderer == nil)
             Divider()
             Button("Zoom In") { renderer?.zoomIn() }
-                .keyboardShortcut("+")
+                .keyboardShortcut("=")
                 .disabled(renderer == nil)
             Button("Zoom Out") { renderer?.zoomOut() }
                 .keyboardShortcut("-")
