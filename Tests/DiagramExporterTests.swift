@@ -41,6 +41,23 @@ struct DiagramExporterTests {
         #expect(padded.pixelsHigh == unpadded.pixelsHigh + 64)
     }
 
+    @Test("PNG scale multiplies pixels and keeps the point size")
+    @MainActor
+    func pngScaleMultipliesPixels() async throws {
+        let renderer = MermaidRenderer()
+        renderer.render(source: "flowchart TD\nA[\"Troy\"] --> B[\"Abed\"]")
+        try await waitForRenderCompletion(renderer: renderer, timeout: .seconds(5))
+
+        let exporter = DiagramExporter(webView: renderer.webView)
+        let single = try #require(NSBitmapImageRep(data: requireSuccess(await exporter.copyAsPNG(scale: 1))))
+        let double = try #require(NSBitmapImageRep(data: requireSuccess(await exporter.copyAsPNG(scale: 2))))
+
+        #expect(abs(double.pixelsWide - (single.pixelsWide * 2)) <= 1)
+        #expect(abs(double.pixelsHigh - (single.pixelsHigh * 2)) <= 1)
+        #expect(abs(double.size.width - single.size.width) <= 1)
+        #expect(nonTransparentPixelCount(in: double) > 100)
+    }
+
     @Test("Exports are independent of preview zoom and pan")
     @MainActor
     func exportsIgnoreViewportTransform() async throws {

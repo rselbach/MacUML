@@ -405,7 +405,7 @@ function exportBackgroundColor() {
     return container ? getComputedStyle(container).backgroundColor : 'white';
 }
 
-function normalizedExportSVG(padding, fillBackground) {
+function normalizedExportSVG(padding, fillBackground, scale) {
     if (!window.exportSVG) return null;
     const backgroundColor = fillBackground ? exportBackgroundColor() : null;
 
@@ -422,14 +422,16 @@ function normalizedExportSVG(padding, fillBackground) {
     }
 
     const safePadding = Number.isFinite(padding) ? Math.max(0, padding) : 0;
+    const safeScale = Number.isFinite(scale) && scale > 0 ? scale : 1;
     const width = viewBox[2] + (safePadding * 2);
     const height = viewBox[3] + (safePadding * 2);
     svg.setAttribute(
         'viewBox',
         [viewBox[0] - safePadding, viewBox[1] - safePadding, width, height].join(' ')
     );
-    svg.setAttribute('width', String(width));
-    svg.setAttribute('height', String(height));
+    // scaling the intrinsic size keeps rasterized output sharp
+    svg.setAttribute('width', String(width * safeScale));
+    svg.setAttribute('height', String(height * safeScale));
     if (backgroundColor) {
         const background = document.createElementNS('http://www.w3.org/2000/svg', 'rect');
         background.setAttribute('x', String(viewBox[0] - safePadding));
@@ -446,17 +448,17 @@ function normalizedExportSVG(padding, fillBackground) {
 
     return {
         svg: new XMLSerializer().serializeToString(svg),
-        width: Math.ceil(width),
-        height: Math.ceil(height)
+        width: Math.ceil(width * safeScale),
+        height: Math.ceil(height * safeScale)
     };
 }
 
 window.getExportSVG = function(fillBackground) {
-    return normalizedExportSVG(0, fillBackground === true)?.svg || '';
+    return normalizedExportSVG(0, fillBackground === true, 1)?.svg || '';
 };
 
-window.rasterizeExportSVG = async function(padding, fillBackground) {
-    const artifact = normalizedExportSVG(padding, false);
+window.rasterizeExportSVG = async function(padding, fillBackground, scale) {
+    const artifact = normalizedExportSVG(padding, false, scale);
     const backgroundColor = fillBackground === true ? exportBackgroundColor() : null;
     if (!artifact) {
         return { success: false, noDiagram: true, error: 'No diagram available to export' };

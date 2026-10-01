@@ -3,7 +3,7 @@ import SwiftUI
 private enum Constants {
     static let fontSizeLabelWidth: CGFloat = 45
     static let windowWidth: CGFloat = 400
-    static let windowHeight: CGFloat = 380
+    static let windowHeight: CGFloat = 420
 }
 
 struct SettingsView: View {
@@ -54,6 +54,14 @@ struct SettingsView: View {
                 }
                 .pickerStyle(.menu)
                 .help("Theme Color matches the preview so dark themes stay readable.")
+
+                Picker("PNG Scale:", selection: $settings.pngExportScale) {
+                    ForEach(AppSettings.pngExportScales, id: \.self) { scale in
+                        Text("\(scale)×").tag(scale)
+                    }
+                }
+                .pickerStyle(.menu)
+                .help("2× and 3× keep exported PNGs sharp on Retina displays and in slides.")
             }
         }
         .formStyle(.grouped)
