@@ -15,7 +15,8 @@ A native macOS editor for [Mermaid](https://mermaid.js.org/) diagrams with live 
 - Live diagram preview with pause and manual refresh
 - Syntax highlighting for Mermaid code
 - Document-based app (`.mmd` and `.mermaid` files)
-- Flowchart, sequence, class, state, and blank templates
+- Templates for flowchart, sequence, class, state, entity relationship, Gantt,
+  pie, mindmap, timeline, and Git graph diagrams
 - Per-document themes saved in Mermaid front matter
 - SVG and PNG file export and clipboard copy
 - Editor, split, and preview layouts with a saved divider position
