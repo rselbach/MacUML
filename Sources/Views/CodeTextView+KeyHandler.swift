@@ -149,6 +149,55 @@ extension CodeTextView {
         }
     }
 
+    /// Comments out the selected lines with `%%`, or uncomments them when all are comments.
+    @objc func toggleComment(_ sender: Any?) {
+        let selection = selectedRange()
+        let text = string as NSString
+        let lineRange = text.lineRange(for: selection)
+        let block = text.substring(with: lineRange)
+        var lines = block.components(separatedBy: "\n")
+        if block.hasSuffix("\n") { lines.removeLast() }
+
+        let contentLines = lines.filter { !$0.trimmingCharacters(in: .whitespaces).isEmpty }
+        let targets = contentLines.isEmpty ? lines : contentLines
+        let isCommented = { (line: String) in
+            let code = line.drop { $0 == " " || $0 == "\t" }
+            // `%%{...}%%` is a directive, not a comment
+            return code.hasPrefix("%%") && !code.hasPrefix("%%{")
+        }
+
+        let toggled: [String]
+        if targets.allSatisfy(isCommented) {
+            toggled = lines.map { line in
+                guard isCommented(line), let marker = line.range(of: "%%") else { return line }
+                var end = marker.upperBound
+                if end < line.endIndex, line[end] == " " { end = line.index(after: end) }
+                return line.replacingCharacters(in: marker.lowerBound..<end, with: "")
+            }
+        } else {
+            let indent = targets.map { $0.prefix { $0 == " " || $0 == "\t" }.count }.min() ?? 0
+            toggled = lines.map { line in
+                guard contentLines.isEmpty || !line.trimmingCharacters(in: .whitespaces).isEmpty else { return line }
+                let insertion = line.index(line.startIndex, offsetBy: min(indent, line.count))
+                return line.replacingCharacters(in: insertion..<insertion, with: "%% ")
+            }
+        }
+
+        let joined = toggled.joined(separator: "\n")
+        let replacement = block.hasSuffix("\n") ? joined + "\n" : joined
+        guard replacement != block, shouldChangeText(in: lineRange, replacementString: replacement) else { return }
+        textStorage?.replaceCharacters(in: lineRange, with: replacement)
+        didChangeText()
+
+        let replacementLength = (replacement as NSString).length
+        if selection.length == 0, lines.count == 1 {
+            let shifted = selection.location + replacementLength - lineRange.length
+            setSelectedRange(NSRange(location: max(lineRange.location, shifted), length: 0))
+        } else {
+            setSelectedRange(NSRange(location: lineRange.location, length: replacementLength))
+        }
+    }
+
     private func stripLeadingIndent(from line: String) -> String {
         if line.hasPrefix(Self.indentString) {
             return String(line.dropFirst(Self.indentString.count))

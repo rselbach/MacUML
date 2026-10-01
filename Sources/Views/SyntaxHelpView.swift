@@ -29,6 +29,7 @@ struct SyntaxHelpView: View {
                         .font(.callout)
                         .foregroundStyle(.secondary)
 
+                    KeyboardCommandRow(title: "Toggle Comment", shortcut: "⌘/")
                     KeyboardCommandRow(title: "Refresh Preview", shortcut: "⌘R")
                     KeyboardCommandRow(title: "Zoom In", shortcut: "⌘+")
                     KeyboardCommandRow(title: "Zoom Out", shortcut: "⌘−")

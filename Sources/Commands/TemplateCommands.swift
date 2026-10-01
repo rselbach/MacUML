@@ -25,7 +25,7 @@ struct SyntaxHelpCommand: Commands {
             Button("Mermaid Syntax Help") {
                 openWindow(id: "syntax-help")
             }
-            .keyboardShortcut("/", modifiers: .command)
+            .keyboardShortcut("?", modifiers: .command)
         }
     }
 }

@@ -124,6 +124,40 @@ struct CodeTextViewTests {
                 charactersIgnoringModifiers: characters, isARepeat: false, keyCode: keyCode))
     }
 
+    @Test(
+        "Toggle Comment adds and removes Mermaid comments",
+        arguments: [
+            ("    Troy --> Abed\n    Abed --> Annie\n", "    %% Troy --> Abed\n    %% Abed --> Annie\n"),
+            ("    %% Troy --> Abed\n    %%Abed --> Annie\n", "    Troy --> Abed\n    Abed --> Annie\n"),
+            ("  Troy\n\n    Abed", "  %% Troy\n\n  %%   Abed"),
+            ("%% Troy\nAbed", "%% %% Troy\n%% Abed"),
+            ("%%{init: {'theme':'dark'}}%%", "%% %%{init: {'theme':'dark'}}%%"),
+        ])
+    func toggleCommentLines(source: String, want: String) {
+        let textView = CodeTextView()
+        textView.string = source
+        textView.setSelectedRange(NSRange(location: 0, length: source.utf16.count))
+
+        textView.toggleComment(nil)
+
+        #expect(textView.string == want)
+    }
+
+    @Test("Toggle Comment keeps the caret on its text")
+    func toggleCommentKeepsCaret() {
+        let textView = CodeTextView()
+        textView.string = "flowchart TD\n    Troy --> Abed"
+        textView.setSelectedRange(NSRange(location: 17, length: 0))
+
+        textView.toggleComment(nil)
+        #expect(textView.string == "flowchart TD\n    %% Troy --> Abed")
+        #expect(textView.selectedRange() == NSRange(location: 20, length: 0))
+
+        textView.toggleComment(nil)
+        #expect(textView.string == "flowchart TD\n    Troy --> Abed")
+        #expect(textView.selectedRange() == NSRange(location: 17, length: 0))
+    }
+
     @Test("Revealing a line focuses it and moves the caret to its start")
     func revealLineFocusesLine() {
         let textView = CodeTextView()

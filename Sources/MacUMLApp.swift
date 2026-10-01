@@ -40,6 +40,11 @@ struct MacUMLApp: App {
                 }
                 .keyboardShortcut("f", modifiers: [.command, .shift])
                 .disabled(formatDocument == nil)
+                Button("Toggle Comment") {
+                    NSApp.sendAction(#selector(CodeTextView.toggleComment(_:)), to: nil, from: nil)
+                }
+                .keyboardShortcut("/", modifiers: .command)
+                .disabled(formatDocument == nil)
             }
         }
 
