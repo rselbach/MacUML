@@ -1,3 +1,4 @@
+import AppKit
 import Foundation
 import WebKit
 import os
@@ -53,18 +54,23 @@ struct DiagramExporter {
     let webView: DiagramWebView
     private let logger = Logging.logger(category: "exporter")
 
-    func copyAsPNG(padding: CGFloat = 16, background: ExportBackground = .transparent) async -> Result<Data, ExportError> {
+    func copyAsPNG(
+        padding: CGFloat = 16, background: ExportBackground = .transparent, scale: Int = 1
+    ) async -> Result<Data, ExportError> {
+        let scale = max(1, scale)
         let js = """
             if (typeof window.rasterizeExportSVG !== 'function') {
                 return { success: false, error: 'PNG export runtime is unavailable' };
             }
-            return await window.rasterizeExportSVG(padding, fillBackground);
+            return await window.rasterizeExportSVG(padding, fillBackground, scale);
             """
 
         do {
             let result = try await webView.callAsyncJavaScript(
                 js,
-                arguments: ["padding": max(0, padding), "fillBackground": background == .theme],
+                arguments: [
+                    "padding": max(0, padding), "fillBackground": background == .theme, "scale": scale,
+                ],
                 contentWorld: .page
             )
             guard let response = result as? [String: Any],
@@ -81,8 +87,8 @@ struct DiagramExporter {
                 return .failure(.rasterizationFailed(message))
             }
             guard let encodedData = response["data"] as? String,
-                let pngData = Data(base64Encoded: encodedData),
-                !pngData.isEmpty
+                let rasterData = Data(base64Encoded: encodedData),
+                let pngData = Self.pngData(rasterData, scale: scale)
             else {
                 logger.error("PNG export failed: preview returned invalid image data")
                 return .failure(.invalidPNGData)
@@ -93,6 +99,16 @@ struct DiagramExporter {
             logger.error("PNG rasterization failed: \(error.localizedDescription)")
             return .failure(.rasterizationFailed(error.localizedDescription))
         }
+    }
+
+    /// Records the point size so apps place a scaled export at the diagram's natural size.
+    private static func pngData(_ data: Data, scale: Int) -> Data? {
+        guard !data.isEmpty, let bitmap = NSBitmapImageRep(data: data) else { return nil }
+        guard scale > 1 else { return data }
+        bitmap.size = NSSize(
+            width: CGFloat(bitmap.pixelsWide) / CGFloat(scale),
+            height: CGFloat(bitmap.pixelsHigh) / CGFloat(scale))
+        return bitmap.representation(using: .png, properties: [:])
     }
 
     func copySVG(background: ExportBackground = .transparent) async -> Result<String, ExportError> {

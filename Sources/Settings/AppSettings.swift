@@ -7,7 +7,7 @@ import SwiftUI
 /// - Editor font family and size
 /// - Line number visibility toggle
 /// - Default diagram theme for new documents
-/// - Export background
+/// - Export background and PNG scale
 ///
 /// Access via `AppSettings.shared`. Changes are automatically persisted.
 @MainActor
@@ -16,6 +16,7 @@ final class AppSettings: ObservableObject {
 
     static let systemFontFamily = "System Monospaced"
     static let fontSizeRange: ClosedRange<Double> = 9...24
+    static let pngExportScales = [1, 2, 3]
 
     @AppStorage("editorFontSize") var editorFontSize: Double = 13
     @AppStorage("editorFontFamily") var editorFontFamily: String = systemFontFamily
@@ -23,6 +24,7 @@ final class AppSettings: ObservableObject {
     @AppStorage("defaultDiagramTheme") var defaultDiagramTheme: MermaidTheme = .auto
     @AppStorage("autoFormatOnSave") var autoFormatOnSave: Bool = false
     @AppStorage("exportBackground") var exportBackground: ExportBackground = .theme
+    @AppStorage("pngExportScale") var pngExportScale: Int = 2
 
     init(defaults: UserDefaults = .standard) {
         _editorFontSize = AppStorage(wrappedValue: 13, "editorFontSize", store: defaults)
@@ -31,6 +33,7 @@ final class AppSettings: ObservableObject {
         _defaultDiagramTheme = AppStorage(wrappedValue: .auto, "defaultDiagramTheme", store: defaults)
         _autoFormatOnSave = AppStorage(wrappedValue: false, "autoFormatOnSave", store: defaults)
         _exportBackground = AppStorage(wrappedValue: .theme, "exportBackground", store: defaults)
+        _pngExportScale = AppStorage(wrappedValue: 2, "pngExportScale", store: defaults)
         if !Self.monospaceFonts.contains(editorFontFamily) {
             editorFontFamily = Self.systemFontFamily
         }
@@ -45,6 +48,10 @@ final class AppSettings: ObservableObject {
             return font
         }
         return NSFont.monospacedSystemFont(ofSize: size, weight: .regular)
+    }
+
+    var validPNGExportScale: Int {
+        Self.pngExportScales.contains(pngExportScale) ? pngExportScale : 2
     }
 
     private static func validFontSize(_ size: Double) -> Double {

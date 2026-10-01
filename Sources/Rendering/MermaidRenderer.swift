@@ -114,7 +114,9 @@ class MermaidRenderer: NSObject, ObservableObject {
     }
 
     func export(
-        _ format: DiagramExportFormat, background: ExportBackground = AppSettings.shared.exportBackground
+        _ format: DiagramExportFormat,
+        background: ExportBackground = AppSettings.shared.exportBackground,
+        pngScale: Int = AppSettings.shared.validPNGExportScale
     ) async throws(ExportError) -> Data {
         guard canExport else { throw .noDiagram }
         let revision = renderRevision
@@ -122,7 +124,7 @@ class MermaidRenderer: NSObject, ObservableObject {
         let data: Data
         switch format {
         case .png:
-            data = try await exporter.copyAsPNG(background: background).get()
+            data = try await exporter.copyAsPNG(background: background, scale: pngScale).get()
         case .svg:
             data = try await exporter.copySVG(background: background).map { Data($0.utf8) }.get()
         }
