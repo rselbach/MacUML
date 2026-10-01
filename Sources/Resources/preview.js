@@ -129,9 +129,12 @@ window.clearDiagram = function() {
 window.zoomLevel = 1.0;
 window.panX = 0;
 window.panY = 0;
+// Fit mode re-fits the diagram after edits and resizes until the user zooms.
+window.fitsWindow = true;
 const ZOOM_STEP = 0.1;
-const ZOOM_MIN = 0.25;
+const ZOOM_MIN = 0.1;
 const ZOOM_MAX = 5.0;
+const FIT_MARGIN = 16;
 
 function hasRenderedSVG() {
     return document.querySelector('#diagram svg') !== null;
@@ -150,13 +153,42 @@ function applyPan() {
     panInner.style.transform = 'translate(' + window.panX + 'px, ' + window.panY + 'px)';
 }
 
+function naturalDiagramSize() {
+    const svg = document.querySelector('#diagram svg');
+    if (!svg) return null;
+    const viewBox = (svg.getAttribute('viewBox') || '').trim().split(/[\s,]+/).map(Number);
+    if (viewBox.length !== 4 || viewBox.some((value) => !Number.isFinite(value)) ||
+        viewBox[2] <= 0 || viewBox[3] <= 0) {
+        return null;
+    }
+    return { width: viewBox[2], height: viewBox[3] };
+}
+
+function clampZoomLevel(level) {
+    return Math.min(ZOOM_MAX, Math.max(ZOOM_MIN, level));
+}
+
+// Shrinks large diagrams to the window but never enlarges small ones.
+function fitZoomLevel() {
+    const container = document.getElementById('diagram');
+    const size = naturalDiagramSize();
+    if (!container || !size) return 1;
+    const width = Math.max(1, container.clientWidth - (FIT_MARGIN * 2));
+    const height = Math.max(1, container.clientHeight - (FIT_MARGIN * 2));
+    return clampZoomLevel(Math.min(1, width / size.width, height / size.height));
+}
+
+// Zoomed past the fit, the view may overscroll by a quarter of the window.
 function panBounds(zoomLevel) {
     const container = document.getElementById('diagram');
-    const width = container ? container.clientWidth : 0;
-    const height = container ? container.clientHeight : 0;
+    const size = naturalDiagramSize();
+    if (!container || !size) return { maxX: 0, maxY: 0 };
     const zoom = Number.isFinite(zoomLevel) ? zoomLevel : window.zoomLevel;
-    const maxX = Math.max(0, ((width * zoom) - width) / 2);
-    const maxY = Math.max(0, ((height * zoom) - height) / 2);
+    if (zoom <= fitZoomLevel() + 0.0001) return { maxX: 0, maxY: 0 };
+    const width = container.clientWidth;
+    const height = container.clientHeight;
+    const maxX = Math.max(0, ((size.width * zoom) - width) / 2) + (width / 4);
+    const maxY = Math.max(0, ((size.height * zoom) - height) / 2) + (height / 4);
     return { maxX, maxY };
 }
 
@@ -177,26 +209,23 @@ function wheelDeltaInPixels(delta, deltaMode, pageSize) {
 function applyZoom() {
     const container = document.getElementById('diagram');
     const inner = container.querySelector('.zoom-inner');
-    if (!inner) return;
-    inner.style.transform = 'scale(' + window.zoomLevel + ')';
-    inner.style.transformOrigin = 'center center';
-    if (window.webkit && window.webkit.messageHandlers.zoomChanged) {
-        window.webkit.messageHandlers.zoomChanged.postMessage(window.zoomLevel);
+    if (inner) {
+        inner.style.transform = 'scale(' + window.zoomLevel + ')';
+        inner.style.transformOrigin = 'center center';
+    }
+    // a fresh page has no diagram yet and must not overwrite the app's restored zoom
+    if (inner && window.webkit && window.webkit.messageHandlers.zoomChanged) {
+        window.webkit.messageHandlers.zoomChanged.postMessage({
+            level: window.zoomLevel,
+            fitsWindow: window.fitsWindow
+        });
     }
 }
 
-window.setPan = function(x, y) {
-    const clamped = clampPan(x, y, window.zoomLevel);
-    window.panX = clamped.x;
-    window.panY = clamped.y;
-    applyPan();
-    return { x: window.panX, y: window.panY };
-};
-
-window.setZoom = function(level, anchorClientX, anchorClientY) {
+function zoomTo(level, anchorClientX, anchorClientY) {
     const container = document.getElementById('diagram');
     const oldZoom = window.zoomLevel;
-    const newZoom = Math.min(ZOOM_MAX, Math.max(ZOOM_MIN, level));
+    const newZoom = clampZoomLevel(level);
     let nextPanX = window.panX;
     let nextPanY = window.panY;
 
@@ -218,6 +247,26 @@ window.setZoom = function(level, anchorClientX, anchorClientY) {
     applyPan();
     applyZoom();
     return window.zoomLevel;
+}
+
+window.setPan = function(x, y) {
+    const clamped = clampPan(x, y, window.zoomLevel);
+    window.panX = clamped.x;
+    window.panY = clamped.y;
+    applyPan();
+    return { x: window.panX, y: window.panY };
+};
+
+window.setZoom = function(level, anchorClientX, anchorClientY) {
+    window.fitsWindow = false;
+    return zoomTo(level, anchorClientX, anchorClientY);
+};
+
+window.fitToWindow = function() {
+    window.fitsWindow = true;
+    window.panX = 0;
+    window.panY = 0;
+    return zoomTo(fitZoomLevel());
 };
 
 window.zoomIn = function() {
@@ -229,32 +278,43 @@ window.zoomOut = function() {
 };
 
 window.resetZoom = function() {
-    return window.setZoom(1.0);
+    return window.fitToWindow();
 };
 
 window.getZoom = function() {
     return window.zoomLevel;
 };
 
+// Lays the SVG out at its natural size; zoom scales it from there.
 window.rescaleSVG = function() {
     const container = document.getElementById('diagram');
     const inner = container.querySelector('.zoom-inner');
     const svgEl = inner ? inner.querySelector('svg') : container.querySelector('svg');
-    if (!svgEl) return;
+    const size = naturalDiagramSize();
+    if (!svgEl || !size) return;
 
     svgEl.removeAttribute('style');
     svgEl.style.display = 'block';
+    svgEl.style.flex = 'none';
     svgEl.style.maxWidth = 'none';
     svgEl.style.maxHeight = 'none';
-    svgEl.style.width = '100%';
-    svgEl.style.height = '100%';
+    svgEl.style.width = size.width + 'px';
+    svgEl.style.height = size.height + 'px';
     svgEl.setAttribute('preserveAspectRatio', 'xMidYMid meet');
 };
+
+function refreshViewport() {
+    if (window.fitsWindow) {
+        window.fitToWindow();
+    } else {
+        window.setPan(window.panX, window.panY);
+    }
+}
 
 // ResizeObserver runs continuously for responsive SVG scaling. Intentional simplicity.
 new ResizeObserver(() => {
     window.rescaleSVG();
-    window.setPan(window.panX, window.panY);
+    refreshViewport();
 }).observe(document.documentElement);
 
 function initInteractions() {
@@ -358,9 +418,10 @@ window.renderDiagram = async function(source) {
             window.exportSVG = svg;
             container.innerHTML = '<div class="pan-inner"><div class="zoom-inner">' + svg + '</div></div>';
             updateInteractionState();
+            window.rescaleSVG();
             applyPan();
             applyZoom();
-            window.rescaleSVG();
+            refreshViewport();
             cleanupUnexpectedBodyNodes('render-success');
             return { success: true };
         } else {

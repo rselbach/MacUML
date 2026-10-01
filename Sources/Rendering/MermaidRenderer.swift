@@ -22,7 +22,10 @@ class MermaidRenderer: NSObject, ObservableObject {
     private nonisolated static let scriptMessageNames = ["ready", "zoomChanged", "appearanceChanged"]
 
     @Published var state: MermaidRenderState = .idle
+    /// The diagram's scale, where 1.0 is its natural size.
     @Published var zoomLevel: Double = 1.0
+    /// Whether the preview fits the diagram to the window after edits and resizes.
+    @Published private(set) var fitsWindow = true
     @Published private(set) var hasDiagram = false
     @Published private(set) var isPreviewStale = false
     @Published private(set) var canExport = false
@@ -58,7 +61,7 @@ class MermaidRenderer: NSObject, ObservableObject {
     private var recoveryAttempts = 0
     private let maximumRecoveryAttempts = 2
     internal static let zoomStep: Double = 0.1
-    internal static let minZoom: Double = 0.25
+    internal static let minZoom: Double = 0.1
     internal static let maxZoom: Double = 5.0
 
     override init() {
@@ -338,7 +341,11 @@ class MermaidRenderer: NSObject, ObservableObject {
         Task { [weak self] in
             guard let self else { return }
             guard await applyThemeToRuntime() else { return }
-            await applyZoom(level: zoomLevel)
+            if fitsWindow {
+                await fitRuntimeToWindow()
+            } else {
+                await applyZoom(level: zoomLevel)
+            }
             render(source: lastSource, force: true)
         }
     }
@@ -504,12 +511,17 @@ extension MermaidRenderer {
     }
 
     func resetZoom() {
-        setZoom(1.0)
+        fitsWindow = true
+        guard mermaidReady else { return }
+        Task {
+            await fitRuntimeToWindow()
+        }
     }
 
     internal func setZoom(_ newLevel: Double) {
         let rounded = (clampZoom(newLevel) * 100).rounded() / 100
         zoomLevel = rounded
+        fitsWindow = false
 
         guard mermaidReady else { return }
         Task {
@@ -535,11 +547,25 @@ extension MermaidRenderer {
         }
     }
 
+    private func fitRuntimeToWindow() async {
+        do {
+            _ = try await webView.callAsyncJavaScript("window.fitToWindow();", arguments: [:], contentWorld: .page)
+        } catch {
+            logger.error("Failed to fit preview to window: \(error.localizedDescription, privacy: .public)")
+        }
+    }
+
     func handleZoomChangedMessage(_ body: Any) {
-        guard let rawLevel = coerceToDouble(body) else {
+        guard let payload = body as? [String: Any],
+            let rawLevel = payload["level"].flatMap(coerceToDouble),
+            let fits = payload["fitsWindow"] as? Bool
+        else {
             logger.error(
                 "zoomChanged bridge payload is invalid: \(String(describing: body), privacy: .public)")
             return
+        }
+        if fitsWindow != fits {
+            fitsWindow = fits
         }
 
         let normalized = (clampZoom(rawLevel) * 100).rounded() / 100
