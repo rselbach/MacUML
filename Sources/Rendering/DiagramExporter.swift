@@ -53,18 +53,18 @@ struct DiagramExporter {
     let webView: DiagramWebView
     private let logger = Logging.logger(category: "exporter")
 
-    func copyAsPNG(padding: CGFloat = 16) async -> Result<Data, ExportError> {
+    func copyAsPNG(padding: CGFloat = 16, background: ExportBackground = .transparent) async -> Result<Data, ExportError> {
         let js = """
             if (typeof window.rasterizeExportSVG !== 'function') {
                 return { success: false, error: 'PNG export runtime is unavailable' };
             }
-            return await window.rasterizeExportSVG(padding);
+            return await window.rasterizeExportSVG(padding, fillBackground);
             """
 
         do {
             let result = try await webView.callAsyncJavaScript(
                 js,
-                arguments: ["padding": max(0, padding)],
+                arguments: ["padding": max(0, padding), "fillBackground": background == .theme],
                 contentWorld: .page
             )
             guard let response = result as? [String: Any],
@@ -95,12 +95,16 @@ struct DiagramExporter {
         }
     }
 
-    func copySVG() async -> Result<String, ExportError> {
+    func copySVG(background: ExportBackground = .transparent) async -> Result<String, ExportError> {
         let js = """
-            typeof window.getExportSVG === 'function' ? window.getExportSVG() : '';
+            return typeof window.getExportSVG === 'function' ? window.getExportSVG(fillBackground) : '';
             """
         do {
-            let result = try await webView.evaluateJavaScript(js)
+            let result = try await webView.callAsyncJavaScript(
+                js,
+                arguments: ["fillBackground": background == .theme],
+                contentWorld: .page
+            )
             guard let rawSvg = result as? String else {
                 logger.error("SVG extraction failed: unexpected type \(type(of: result))")
                 return .failure(

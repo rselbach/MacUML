@@ -105,6 +105,29 @@ struct DiagramExporterTests {
         }
     }
 
+    @Test("Theme background keeps dark exports legible")
+    @MainActor
+    func themeBackgroundFillsDarkExports() async throws {
+        let renderer = MermaidRenderer()
+        renderer.theme = .dark
+        renderer.render(source: "flowchart LR\nTroy --> Abed")
+        try await waitForRenderCompletion(renderer: renderer, timeout: .seconds(5))
+
+        let filled = try #require(NSBitmapImageRep(data: try await renderer.export(.png, background: .theme)))
+        let corner = try #require(filled.colorAt(x: 0, y: 0)?.usingColorSpace(.sRGB))
+        #expect(corner.alphaComponent == 1)
+        #expect(corner.brightnessComponent < 0.2)
+
+        let transparent = try #require(
+            NSBitmapImageRep(data: try await renderer.export(.png, background: .transparent)))
+        #expect(transparent.colorAt(x: 0, y: 0)?.alphaComponent == 0)
+
+        let svg = String(decoding: try await renderer.export(.svg, background: .theme), as: UTF8.self)
+        #expect(svg.contains("fill:rgb(30, 30, 30)"))
+        let plainSVG = String(decoding: try await renderer.export(.svg, background: .transparent), as: UTF8.self)
+        #expect(!plainSVG.contains("fill:rgb(30, 30, 30)"))
+    }
+
     @Test("Exports fail when no current diagram exists")
     @MainActor
     func exportsFailWithoutDiagram() async {

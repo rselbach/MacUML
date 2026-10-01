@@ -30,7 +30,9 @@ commands. Mermaid diagrams are text files, so they work with version control and
 other Mermaid tools.
 
 Use the toolbar's **Export** menu to save or copy the complete diagram as SVG or
-PNG. Export does not depend on the preview's zoom or pan position. When an edit
+PNG. Export does not depend on the preview's zoom or pan position. Exports use
+the theme's background color so dark diagrams stay readable; choose Transparent
+under **Settings > Export** to omit it. When an edit
 contains an error, the last successful preview stays visible with a notice.
 Export becomes available again once the preview matches the source.
 

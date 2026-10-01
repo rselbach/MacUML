@@ -7,6 +7,7 @@ import SwiftUI
 /// - Editor font family and size
 /// - Line number visibility toggle
 /// - Default diagram theme for new documents
+/// - Export background
 ///
 /// Access via `AppSettings.shared`. Changes are automatically persisted.
 @MainActor
@@ -21,6 +22,7 @@ final class AppSettings: ObservableObject {
     @AppStorage("showLineNumbers") var showLineNumbers: Bool = true
     @AppStorage("defaultDiagramTheme") var defaultDiagramTheme: MermaidTheme = .auto
     @AppStorage("autoFormatOnSave") var autoFormatOnSave: Bool = false
+    @AppStorage("exportBackground") var exportBackground: ExportBackground = .theme
 
     init(defaults: UserDefaults = .standard) {
         _editorFontSize = AppStorage(wrappedValue: 13, "editorFontSize", store: defaults)
@@ -28,6 +30,7 @@ final class AppSettings: ObservableObject {
         _showLineNumbers = AppStorage(wrappedValue: true, "showLineNumbers", store: defaults)
         _defaultDiagramTheme = AppStorage(wrappedValue: .auto, "defaultDiagramTheme", store: defaults)
         _autoFormatOnSave = AppStorage(wrappedValue: false, "autoFormatOnSave", store: defaults)
+        _exportBackground = AppStorage(wrappedValue: .theme, "exportBackground", store: defaults)
         if !Self.monospaceFonts.contains(editorFontFamily) {
             editorFontFamily = Self.systemFontFamily
         }
