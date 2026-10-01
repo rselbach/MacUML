@@ -76,6 +76,54 @@ struct CodeTextViewTests {
         #expect(textView.string == "Troy\nAbed\n")
     }
 
+    @Test("Key handling leaves Return and composing input method text to AppKit")
+    func keyHandlingDefersToInputMethods() throws {
+        let textView = CodeTextView()
+        textView.string = "    Troy"
+        textView.setSelectedRange(NSRange(location: 8, length: 0))
+
+        #expect(!textView.handleKeyDown(try keyEvent(keyCode: 36, characters: "\r")))
+        #expect(!textView.handleKeyDown(try keyEvent(keyCode: 48, characters: "\t")))
+        #expect(textView.handleKeyDown(try keyEvent(keyCode: 115, characters: "\u{F729}")))
+
+        textView.setMarkedText(
+            "か", selectedRange: NSRange(location: 1, length: 0),
+            replacementRange: NSRange(location: NSNotFound, length: 0))
+        #expect(!textView.handleKeyDown(try keyEvent(keyCode: 115, characters: "\u{F729}")))
+    }
+
+    @Test("Return keeps the current line's indentation")
+    func returnKeepsIndentation() throws {
+        let textView = CodeTextView()
+        textView.string = "    Troy"
+        textView.setSelectedRange(NSRange(location: 8, length: 0))
+
+        textView.insertNewline(nil)
+
+        #expect(textView.string == "    Troy\n    ")
+    }
+
+    @Test("Tab and Shift-Tab indent and unindent through text view commands")
+    func tabCommandsIndent() {
+        let textView = CodeTextView()
+        textView.string = "Troy\nAbed"
+        textView.setSelectedRange(NSRange(location: 0, length: 9))
+
+        textView.insertTab(nil)
+        #expect(textView.string == "    Troy\n    Abed")
+
+        textView.insertBacktab(nil)
+        #expect(textView.string == "Troy\nAbed")
+    }
+
+    private func keyEvent(keyCode: UInt16, characters: String) throws -> NSEvent {
+        try #require(
+            NSEvent.keyEvent(
+                with: .keyDown, location: .zero, modifierFlags: [], timestamp: 0,
+                windowNumber: 0, context: nil, characters: characters,
+                charactersIgnoringModifiers: characters, isARepeat: false, keyCode: keyCode))
+    }
+
     @Test("Revealing a line focuses it and moves the caret to its start")
     func revealLineFocusesLine() {
         let textView = CodeTextView()

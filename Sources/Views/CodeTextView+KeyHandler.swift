@@ -3,8 +3,6 @@ import Carbon.HIToolbox.Events
 
 extension CodeTextView {
     private enum KeyCode: UInt16 {
-        case tab
-        case returnKey
         case home
         case end
         case pageUp
@@ -16,8 +14,6 @@ extension CodeTextView {
 
         init?(rawValue: UInt16) {
             switch Int(rawValue) {
-            case kVK_Tab: self = .tab
-            case kVK_Return: self = .returnKey
             case kVK_Home: self = .home
             case kVK_End: self = .end
             case kVK_PageUp: self = .pageUp
@@ -32,6 +28,8 @@ extension CodeTextView {
     }
 
     func handleKeyDown(_ event: NSEvent) -> Bool {
+        // an input method composing text owns these keys
+        guard !hasMarkedText() else { return false }
         let flags = event.modifierFlags.intersection(.deviceIndependentFlagsMask)
         let hasShift = flags.contains(.shift)
 
@@ -40,16 +38,6 @@ extension CodeTextView {
         }
 
         switch keyCode {
-        case .tab:
-            if hasShift {
-                unindentSelection()
-            } else {
-                indentSelection()
-            }
-            return true
-        case .returnKey:
-            insertNewlineWithIndent()
-            return true
         case .home:
             performMove(
                 hasShift: hasShift, normal: #selector(moveToBeginningOfLine(_:)),
@@ -169,6 +157,18 @@ extension CodeTextView {
         }
         let stripped = line.drop(while: { $0 == " " })
         return stripped.isEmpty ? line : String(stripped)
+    }
+
+    override func insertTab(_ sender: Any?) {
+        indentSelection()
+    }
+
+    override func insertBacktab(_ sender: Any?) {
+        unindentSelection()
+    }
+
+    override func insertNewline(_ sender: Any?) {
+        insertNewlineWithIndent()
     }
 
     private func insertNewlineWithIndent() {
