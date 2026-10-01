@@ -389,7 +389,7 @@ window.renderDiagram = async function(source) {
         }
 
         if (line !== null) {
-            line += leadingBlankLineOffset(source);
+            line = originalLineNumber(source, line);
         }
 
         return { success: false, error: msg, line: line };
@@ -476,11 +476,65 @@ window.rasterizeExportSVG = async function(padding) {
     });
 };
 
-function leadingBlankLineOffset(source) {
-    const match = source.match(/^(?:(?:[\t ]*)(?:\r\n|\r|\n))+/);
-    if (!match) return 0;
-    // Mermaid keeps the blank lines but reports a one-based source line as zero-based.
-    return 1;
+// Mermaid numbers error lines after its preprocessing (Mermaid 11 preprocessDiagram):
+// it normalizes line endings and strips front matter, directives, comment lines,
+// and leading whitespace. Replay those steps while tracking each character's
+// original line so errors point at the line the user wrote.
+const FRONT_MATTER_PATTERN = /^-{3}\s*[\n\r](.*?)[\n\r]-{3}\s*[\n\r]+/s;
+const DIRECTIVE_PATTERN = /%{2}{\s*(?:(\w+)\s*:|(\w+))\s*(?:(\w+)|((?:(?!}%{2}).|\r?\n)*))?\s*(?:}%{2})?/gi;
+const COMMENT_LINE_PATTERN = /^\s*%%(?!{)[^\n]+\n?/gm;
+const LEADING_WHITESPACE_PATTERN = /^\s+/;
+
+function removeMatches(state, pattern) {
+    let text = '';
+    let lines = [];
+    let last = 0;
+    const flags = pattern.flags.includes('g') ? pattern.flags : pattern.flags + 'g';
+    for (const match of state.text.matchAll(new RegExp(pattern.source, flags))) {
+        if (match[0].length === 0) continue;
+        text += state.text.slice(last, match.index);
+        lines = lines.concat(state.lines.slice(last, match.index));
+        last = match.index + match[0].length;
+        if (!pattern.flags.includes('g')) break;
+    }
+    text += state.text.slice(last);
+    lines = lines.concat(state.lines.slice(last));
+    return { text, lines };
+}
+
+function originalLineNumber(source, processedLine) {
+    // line numbers follow the editor, which counts only LF as a line break
+    let state = { text: '', lines: [] };
+    let line = 1;
+    for (let index = 0; index < source.length; index += 1) {
+        const char = source[index];
+        if (char === '\r') {
+            if (source[index + 1] !== '\n') {
+                state.text += '\n';
+                state.lines.push(line);
+            }
+            continue;
+        }
+        state.text += char;
+        state.lines.push(line);
+        if (char === '\n') line += 1;
+    }
+
+    state = removeMatches(state, FRONT_MATTER_PATTERN);
+    state = removeMatches(state, DIRECTIVE_PATTERN);
+    state = removeMatches(state, COMMENT_LINE_PATTERN);
+    state = removeMatches(state, LEADING_WHITESPACE_PATTERN);
+
+    let lineStart = 0;
+    for (let current = 1; current < processedLine && lineStart <= state.text.length; current += 1) {
+        const next = state.text.indexOf('\n', lineStart);
+        lineStart = next === -1 ? state.text.length + 1 : next + 1;
+    }
+    if (state.text.slice(lineStart).trim().length > 0) return state.lines[lineStart];
+
+    // errors at the end of input point past the last line; report the last line with content
+    const lastContent = state.text.search(/\S\s*$/);
+    return lastContent === -1 ? processedLine : state.lines[lastContent];
 }
 
 document.addEventListener('DOMContentLoaded', () => {
