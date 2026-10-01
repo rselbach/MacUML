@@ -41,15 +41,15 @@ final class MermaidHighlighter {
             ("%%[^\\n]*", commentColor),
             ("\"[^\"\\n]*\"", stringColor),
             ("'[^'\\n]*'", stringColor),
-            ("\\|[^|]+\\|", stringColor),
+            ("\\|[^|\\n]+\\|", stringColor),
             ("-->>|->>|--x|-x|--\\)|-\\)|:", arrowColor),
             ("-->|==>|-.->|==>>|-.->>|--o|<-->|<--|<.->", arrowColor),
             ("---|===|\\.\\.\\.", arrowColor),
-            ("\\(\\([^)]+\\)\\)", nodeColor),
-            ("\\[\\[[^\\]]+\\]\\]", nodeColor),
-            ("\\[[^\\]]+\\]", nodeColor),
-            ("\\([^)]+\\)", nodeColor),
-            ("\\{[^}]+\\}", nodeColor),
+            ("\\(\\([^)\\n]+\\)\\)", nodeColor),
+            ("\\[\\[[^\\]\\n]+\\]\\]", nodeColor),
+            ("\\[[^\\]\\n]+\\]", nodeColor),
+            ("\\([^)\\n]+\\)", nodeColor),
+            ("\\{[^}\\n]+\\}", nodeColor),
         ]
 
         return patternDefs.compactMap { pattern, color in

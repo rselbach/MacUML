@@ -53,6 +53,23 @@ struct MermaidHighlighterTests {
         #expect(foregroundColor(in: storage, at: 9) != .systemPurple, "space between keywords should not be purple")
     }
 
+    @Test("Bracket and label spans stop at line breaks")
+    func spansStopAtLineBreaks() async {
+        let text = DiagramTemplate.classDiagram.source
+        let storage = await makeStorage(text)
+        let body = (text as NSString).range(of: "+String project")
+        for i in body.location..<NSMaxRange(body) {
+            #expect(foregroundColor(in: storage, at: i) != .systemOrange, "class body char \(i) should not be a node")
+        }
+
+        let flowchart = "flowchart TD\n    Troy{Ready?} -->|Yes\n    Abed(Done"
+        let flowchartStorage = await makeStorage(flowchart)
+        let decision = (flowchart as NSString).range(of: "{Ready?}")
+        #expect(foregroundColor(in: flowchartStorage, at: decision.location) == .systemOrange)
+        let abed = (flowchart as NSString).range(of: "Abed")
+        #expect(foregroundColor(in: flowchartStorage, at: abed.location) != .systemRed)
+    }
+
     // MARK: - Comments
 
     @Test("Line comments are highlighted green")
