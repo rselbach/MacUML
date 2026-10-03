@@ -203,7 +203,7 @@ struct CodeTextViewTests {
         #expect(model.text == "Troy")
 
         model.showsEditor = true
-        await refresh(hostingView)
+        await refresh(hostingView) { window.firstResponder === textView }
         #expect(model.actions.textView === textView)
         #expect(textView.window === window)
         #expect(textView.string == "Troy")
@@ -275,7 +275,7 @@ struct CodeTextViewTests {
 
         model.actions.revealLine(3)
         model.showsEditor = true
-        await refresh(hostingView)
+        await refresh(hostingView) { model.actions.textView != nil && window.firstResponder === model.actions.textView }
 
         let textView = try #require(model.actions.textView)
         #expect(textView.selectedRange() == NSRange(location: 10, length: 0))
@@ -288,6 +288,17 @@ struct CodeTextViewTests {
         hostingView.layoutSubtreeIfNeeded()
         await nextMainQueueTurn()
         await nextMainQueueTurn()
+    }
+
+    /// Refreshes until `condition` holds. SwiftUI attachment and the editor's deferred focus restoration take a
+    /// varying number of main queue turns, so a fixed refresh can finish first on a slow machine.
+    private func refresh<Content: View>(
+        _ hostingView: NSHostingView<Content>, until condition: () -> Bool
+    ) async {
+        let deadline = ContinuousClock.now + .seconds(10)
+        while !condition(), ContinuousClock.now < deadline {
+            await refresh(hostingView)
+        }
     }
 
     private func nextMainQueueTurn() async {
