@@ -209,6 +209,10 @@ extension CodeTextView {
     }
 
     override func insertTab(_ sender: Any?) {
+        guard activeCompletions == nil else {
+            acceptCompletion()
+            return
+        }
         indentSelection()
     }
 
@@ -217,12 +221,19 @@ extension CodeTextView {
     }
 
     override func insertNewline(_ sender: Any?) {
+        guard activeCompletions == nil else {
+            acceptCompletion()
+            return
+        }
         insertNewlineWithIndent()
     }
 
     override func insertText(_ string: Any, replacementRange: NSRange) {
         super.insertText(string, replacementRange: replacementRange)
         let typed = (string as? String) ?? (string as? NSAttributedString)?.string
+        if let typed {
+            showCompletions(afterTyping: typed)
+        }
         guard typed == " " || typed == "}",
             let realignment = MermaidIndentation.realignment(
                 afterTypingIn: self.string as NSString, at: selectedRange().location)

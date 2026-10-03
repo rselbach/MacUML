@@ -16,6 +16,7 @@ A native macOS editor for [Mermaid](https://mermaid.js.org/) diagrams with live 
 - Syntax highlighting for Mermaid code
 - Automatic indentation for diagram bodies and blocks such as `subgraph`, `loop`,
   and `{ }`
+- Completion for diagram types, statements, and names already in the document
 - Document-based app (`.mmd` and `.mermaid` files)
 - Templates for flowchart, sequence, class, state, entity relationship, Gantt,
   pie, mindmap, timeline, and Git graph diagrams
@@ -61,6 +62,7 @@ Default** removes it and uses the theme chosen in Settings.
 | Copy SVG | ⌘⇧C |
 | Format Document | ⌘⇧F |
 | Toggle Comment | ⌘/ |
+| Show Completions | ⌥⎋ or F5 |
 | Mermaid Syntax Help | ⌘? |
 
 Format Document cleans up whitespace and preserves Mermaid syntax. The optional
@@ -72,6 +74,14 @@ Return indents the line after a diagram declaration or a block opener such as
 the line moves to align with the line that opened its block. In Gantt, journey,
 and timeline diagrams, each `section` aligns with the previous one. Undo
 restores the original indentation.
+
+After you type two characters of a word, a list suggests ways to finish it. The
+first line offers diagram types. The start of a later line offers the
+statements of the declared diagram, such as `participant` or `subgraph`. Any
+word offers names already in the document. Press Tab or Return to insert the
+highlighted suggestion, or choose another with the arrow keys or a click.
+Escape closes the list. Option-Escape or F5 shows it for the word at the caret,
+including an empty one.
 
 ## Installation
 

@@ -30,6 +30,7 @@ struct SyntaxHelpView: View {
                         .foregroundStyle(.secondary)
 
                     KeyboardCommandRow(title: "Toggle Comment", shortcut: "⌘/")
+                    KeyboardCommandRow(title: "Show Completions", shortcut: "⌥⎋ or F5")
                     KeyboardCommandRow(title: "Refresh Preview", shortcut: "⌘R")
                     KeyboardCommandRow(title: "Zoom In", shortcut: "⌘=")
                     KeyboardCommandRow(title: "Zoom Out", shortcut: "⌘−")
@@ -54,6 +55,11 @@ struct SyntaxHelpView: View {
                     .foregroundStyle(.secondary)
                     Text(
                         "Return indents inside blocks such as subgraph, loop, and { }. Typing end, else, or } aligns the line with the line that opened its block."
+                    )
+                    .font(.callout)
+                    .foregroundStyle(.secondary)
+                    Text(
+                        "After two characters of a word, the editor suggests diagram types, statements such as participant or subgraph, and names already in the document. Tab or Return inserts the highlighted suggestion. Escape closes the list."
                     )
                     .font(.callout)
                     .foregroundStyle(.secondary)

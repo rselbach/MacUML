@@ -106,24 +106,9 @@ enum MermaidIndentation {
         }
     }
 
-    /// The diagram declaration: the first line after front matter that is neither blank nor a comment.
     private static func header(in text: NSString) -> Header? {
-        var location = 0
-        var inFrontMatter = false
-        while location < text.length {
-            let range = text.lineRange(for: NSRange(location: location, length: 0))
-            let content = text.substring(with: range).trimmingCharacters(in: .whitespacesAndNewlines)
-            location = NSMaxRange(range)
-            if range.location == 0, content == "---" {
-                inFrontMatter = true
-            } else if inFrontMatter {
-                inFrontMatter = content != "---"
-            } else if !content.isEmpty, !content.hasPrefix("%%") {
-                let keyword = String(content.prefix { !$0.isWhitespace })
-                return Header(lineRange: range, vocabulary: vocabularies[keyword] ?? Vocabulary())
-            }
-        }
-        return nil
+        guard let declaration = MermaidDeclaration(in: text) else { return nil }
+        return Header(lineRange: declaration.lineRange, vocabulary: vocabularies[declaration.keyword] ?? Vocabulary())
     }
 
     private static func role(of content: String, in vocabulary: Vocabulary) -> Role {

@@ -9,6 +9,13 @@ final class CodeTextView: NSTextView {
     var errorLine: Int?
     var previousErrorRange: NSRange?
     var didMoveToWindowHandler: (() -> Void)?
+    /// The suggestions in the completion list, or nil while it is hidden.
+    var activeCompletions: MermaidCompletion.Completions?
+    lazy var completionPanel: CompletionPanel = {
+        let panel = CompletionPanel()
+        panel.onAccept = { [weak self] in self?.acceptCompletion($0) }
+        return panel
+    }()
 
     private(set) var lineStartOffsets: [Int] = [0]
 
