@@ -2,7 +2,6 @@ import AppKit
 import SwiftUI
 
 final class CodeTextView: NSTextView {
-    static let indentString = "    "
     private static let highlightDebounceInterval: Duration = .milliseconds(100)
     private let highlighter = MermaidHighlighter.shared
     private var highlightTask: Task<Void, Never>?

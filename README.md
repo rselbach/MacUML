@@ -14,6 +14,8 @@ A native macOS editor for [Mermaid](https://mermaid.js.org/) diagrams with live 
 - Native SwiftUI interface
 - Live diagram preview with pause and manual refresh
 - Syntax highlighting for Mermaid code
+- Automatic indentation for diagram bodies and blocks such as `subgraph`, `loop`,
+  and `{ }`
 - Document-based app (`.mmd` and `.mermaid` files)
 - Templates for flowchart, sequence, class, state, entity relationship, Gantt,
   pie, mindmap, timeline, and Git graph diagrams
@@ -64,6 +66,12 @@ Default** removes it and uses the theme chosen in Settings.
 Format Document cleans up whitespace and preserves Mermaid syntax. The optional
 formatting setting in Settings applies to explicit Save and Save As commands.
 Autosave preserves in-progress typing. Formatting can be undone.
+
+Return indents the line after a diagram declaration or a block opener such as
+`subgraph`, `loop`, `alt`, or `{`. When you finish typing `end`, `else`, or `}`,
+the line moves to align with the line that opened its block. In Gantt, journey,
+and timeline diagrams, each `section` aligns with the previous one. Undo
+restores the original indentation.
 
 ## Installation
 

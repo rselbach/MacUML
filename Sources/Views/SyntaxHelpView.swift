@@ -52,6 +52,11 @@ struct SyntaxHelpView: View {
                     )
                     .font(.callout)
                     .foregroundStyle(.secondary)
+                    Text(
+                        "Return indents inside blocks such as subgraph, loop, and { }. Typing end, else, or } aligns the line with the line that opened its block."
+                    )
+                    .font(.callout)
+                    .foregroundStyle(.secondary)
                 }
             }
             .padding(24)

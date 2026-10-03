@@ -101,7 +101,7 @@ extension CodeTextView {
         let text = string as NSString
 
         if range.length == 0 {
-            insertText(Self.indentString, replacementRange: range)
+            insertText(MermaidIndentation.unit, replacementRange: range)
             return
         }
 
@@ -111,7 +111,7 @@ extension CodeTextView {
 
         if lines.last == "" { lines.removeLast() }
 
-        let indented = lines.map { Self.indentString + $0 }.joined(separator: "\n")
+        let indented = lines.map { MermaidIndentation.unit + $0 }.joined(separator: "\n")
         let finalText = selectedText.hasSuffix("\n") ? indented + "\n" : indented
 
         if shouldChangeText(in: lineRange, replacementString: finalText) {
@@ -199,8 +199,8 @@ extension CodeTextView {
     }
 
     private func stripLeadingIndent(from line: String) -> String {
-        if line.hasPrefix(Self.indentString) {
-            return String(line.dropFirst(Self.indentString.count))
+        if line.hasPrefix(MermaidIndentation.unit) {
+            return String(line.dropFirst(MermaidIndentation.unit.count))
         } else if line.hasPrefix("\t") {
             return String(line.dropFirst(1))
         }
@@ -220,13 +220,37 @@ extension CodeTextView {
         insertNewlineWithIndent()
     }
 
-    private func insertNewlineWithIndent() {
-        let text = string as NSString
-        let cursorLocation = selectedRange().location
-        let lineStart = text.lineRange(for: NSRange(location: cursorLocation, length: 0)).location
-        let linePrefix = text.substring(with: NSRange(location: lineStart, length: cursorLocation - lineStart))
+    override func insertText(_ string: Any, replacementRange: NSRange) {
+        super.insertText(string, replacementRange: replacementRange)
+        let typed = (string as? String) ?? (string as? NSAttributedString)?.string
+        guard typed == " " || typed == "}",
+            let realignment = MermaidIndentation.realignment(
+                afterTypingIn: self.string as NSString, at: selectedRange().location)
+        else { return }
+        breakUndoCoalescing()
+        apply(realignment)
+        breakUndoCoalescing()
+    }
 
-        let indent = String(linePrefix.prefix(while: { $0 == " " || $0 == "\t" }))
-        insertText("\n" + indent, replacementRange: selectedRange())
+    private func insertNewlineWithIndent() {
+        let newline = MermaidIndentation.newline(in: string as NSString, at: selectedRange().location)
+        guard let realignment = newline.realignment else {
+            insertText("\n" + newline.indent, replacementRange: selectedRange())
+            return
+        }
+        // one undo step covers the realignment and the newline
+        breakUndoCoalescing()
+        apply(realignment)
+        insertText("\n" + newline.indent, replacementRange: selectedRange())
+        breakUndoCoalescing()
+    }
+
+    private func apply(_ realignment: MermaidIndentation.Realignment) {
+        let selection = selectedRange()
+        guard shouldChangeText(in: realignment.range, replacementString: realignment.indent) else { return }
+        textStorage?.replaceCharacters(in: realignment.range, with: realignment.indent)
+        didChangeText()
+        let shift = realignment.indent.utf16.count - realignment.range.length
+        setSelectedRange(NSRange(location: selection.location + shift, length: selection.length))
     }
 }

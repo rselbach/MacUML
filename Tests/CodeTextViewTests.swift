@@ -95,12 +95,12 @@ struct CodeTextViewTests {
     @Test("Return keeps the current line's indentation")
     func returnKeepsIndentation() throws {
         let textView = CodeTextView()
-        textView.string = "    Troy"
-        textView.setSelectedRange(NSRange(location: 8, length: 0))
+        textView.string = "flowchart TD\n    Troy"
+        textView.setSelectedRange(NSRange(location: 21, length: 0))
 
         textView.insertNewline(nil)
 
-        #expect(textView.string == "    Troy\n    ")
+        #expect(textView.string == "flowchart TD\n    Troy\n    ")
     }
 
     @Test("Tab and Shift-Tab indent and unindent through text view commands")
